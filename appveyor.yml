@@ -25,6 +25,9 @@ build_script:
 #on_failure:
 #  - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
 
+test_script:
+  - ps: dotnet test .\test\Foundatio.AzureStorage.Tests\Foundatio.AzureStorage.Tests.csproj --no-build
+
 after_test:
   - ps: dotnet pack -c Release
 
