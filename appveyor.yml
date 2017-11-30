@@ -1,10 +1,14 @@
-version: 5.1.{build}
+version: 6.0.{build}
 os: Visual Studio 2017
 clone_depth: 2
 configuration: Release
 
 pull_requests:
   do_not_increment_build_number: true
+
+environment: 
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true 
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 init:
   - git config --global core.autocrlf input
@@ -14,14 +18,15 @@ init:
 
 before_build:
   - ps: .\build\Set-BuildVersion -Version $env:APPVEYOR_BUILD_VERSION -Suffix $env:VERSION_SUFFIX
-  - nuget sources add -name Exceptionless -source https://www.myget.org/F/exceptionless/api/v3/index.json
-  - appveyor-retry dotnet restore -v Minimal
 
 build_script:
   - ps: dotnet build -c Release
 
 #on_failure:
 #  - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
+
+test_script:
+  - ps: dotnet test .\test\Foundatio.AzureStorage.Tests\Foundatio.AzureStorage.Tests.csproj --no-build
 
 after_test:
   - ps: dotnet pack -c Release
@@ -47,5 +52,5 @@ deploy:
 notifications:
   - provider: Slack
     auth_token:
-      secure: GniMpFE62HprSyQNQoej/fBOAdbQe8EMWAMMNXX0s2JxeNePjemiO1bCf4eYweE4p70mm0sCwMjeEP/Ps9aTMA==
+      secure: GniMpFE62HprSyQNQoej/VSBnxn2GNnTrca3BnF8+ikMdqduO4Ts4t297teZF6wDAmGwnOtXusctUla8+WxLFkIztvVCS2Z1RG/DvEDYoc0=
     channel: '#notifications'
