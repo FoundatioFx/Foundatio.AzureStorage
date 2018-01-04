@@ -3,6 +3,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/abateixcmgqxoj8f?svg=true)](https://ci.appveyor.com/project/Exceptionless/foundatio-azurestorage-agg58)
 [![NuGet Version](http://img.shields.io/nuget/v/Foundatio.AzureStorage.svg?style=flat)](https://www.nuget.org/packages/Foundatio.AzureStorage/)
 [![Slack Status](https://slack.exceptionless.com/badge.svg)](https://slack.exceptionless.com)
+[![Help Contribute to Open Source](https://www.codetriage.com/foundatiofx/foundatio.azurestorage/badges/users.svg)](https://www.codetriage.com/foundatiofx/foundatio.azurestorage)
 
 Pluggable foundation blocks for building loosely coupled distributed apps.
 - [Caching](#caching)
