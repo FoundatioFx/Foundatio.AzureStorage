@@ -9,6 +9,8 @@ pull_requests:
 environment:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  AzureStorageConnectionString:
+    secure: 64/UiTDtjyattKbExuIsMKlZ4pLS1NjUYQp+lzlCnDFcRGhbrq0EQPfQtnjmeWcAI+9a2srCis4JOt6qciTw31SrBVbiYBl9+36XRmNzMkS1qTgl6rpOz54N8jQtqigOr5ofj+E9ujMgGsS4agn4VSh1CwlD8fYt+pX434bpYmstTlNMmFFFfJ+hRwK8a1ThCfcDffRFLbbEPGyANoAKKN0Mephiiu92WJ7YDXihcuhQIxj23jxF2xwi1bHGBENL
 
 init:
   - git config --global core.autocrlf input
