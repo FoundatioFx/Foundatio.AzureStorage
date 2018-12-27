@@ -1,8 +1,0 @@
-<Project ToolsVersion="15.0">
-  <PropertyGroup>
-    <IsPackable>False</IsPackable>
-    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
-    <DefineConstants>$(DefineConstants);NETSTANDARD</DefineConstants>
-  </PropertyGroup>
-</Project>
