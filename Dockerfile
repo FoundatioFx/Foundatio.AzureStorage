@@ -4,7 +4,7 @@ WORKDIR /app
 ARG VERSION_SUFFIX=0-dev
 ENV VERSION_SUFFIX=$VERSION_SUFFIX
 
-COPY ./*.sln ./NuGet.config ./
+COPY ./*.sln ./NuGet.Config ./
 COPY ./build/*.props ./build/
 
 # Copy the main source project files
