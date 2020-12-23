@@ -9,21 +9,20 @@ using Foundatio.Azure.Extensions;
 using Foundatio.Extensions;
 using Foundatio.Serializer;
 using Foundatio.Utility;
-using Microsoft.Azure.Storage;
-using Microsoft.Azure.Storage.Blob;
+using Azure.Storage;
+using Azure.Storage.Blobs;
 
 namespace Foundatio.Storage {
     public class AzureFileStorage : IFileStorage {
-        private readonly CloudBlobContainer _container;
+        // A container in the storage account used via BlobContainerClient
+        private readonly BlobContainerClient _container;
         private readonly ISerializer _serializer;
 
         public AzureFileStorage(AzureFileStorageOptions options) {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
-
-            var account = CloudStorageAccount.Parse(options.ConnectionString);
-            var client = account.CreateCloudBlobClient();
-            _container = client.GetContainerReference(options.ContainerName);
+            // The storage account used via BlobServiceClient
+            var _container = new BlobContainerClient(options.ConnectionString, options.ContainerName);
             _container.CreateIfNotExistsAsync().GetAwaiter().GetResult();
             _serializer = options.Serializer ?? DefaultSerializer.Instance;
         }
@@ -37,7 +36,7 @@ namespace Foundatio.Storage {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentNullException(nameof(path));
 
-            var blockBlob = _container.GetBlockBlobReference(path);
+            var blockBlob = _container.GetBlobClient(path);
             try {
                 return await blockBlob.OpenReadAsync(null, null, null, cancellationToken).AnyContext();
             } catch (StorageException ex) {
