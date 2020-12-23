@@ -9,8 +9,9 @@ using Foundatio.Azure.Extensions;
 using Foundatio.Extensions;
 using Foundatio.Serializer;
 using Foundatio.Utility;
-using Azure.Storage;
+using Azure;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 
 namespace Foundatio.Storage {
     public class AzureFileStorage : IFileStorage {
@@ -38,9 +39,10 @@ namespace Foundatio.Storage {
 
             var blockBlob = _container.GetBlobClient(path);
             try {
-                return await blockBlob.OpenReadAsync(null, null, null, cancellationToken).AnyContext();
-            } catch (StorageException ex) {
-                if (ex.RequestInformation.HttpStatusCode == 404)
+                return await blockBlob.OpenReadAsync(null, cancellationToken).AnyContext();
+                // All Blob service operations will throw a RequestFailedException instead of StorageException in v11 on failure with helpful ErrorCode
+            } catch (RequestFailedException ex) {
+                if (ex.ErrorCode == BlobErrorCode.BlobNotFound)
                     return null;
 
                 throw;
@@ -50,12 +52,13 @@ namespace Foundatio.Storage {
         public async Task<FileSpec> GetFileInfoAsync(string path) {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentNullException(nameof(path));
-
-            var blob = _container.GetBlockBlobReference(path);
+            var blob = _container.GetBlobClient(path);
             try {
-                await blob.FetchAttributesAsync().AnyContext();
-                return blob.ToFileInfo();
-            } catch (Exception) { }
+                BlobProperties properties = await blob.GetPropertiesAsync().AnyContext();
+                return properties.ToFileInfo(blob.Name);
+            } catch (RequestFailedException) {
+
+            }
 
             return null;
         }
@@ -64,8 +67,9 @@ namespace Foundatio.Storage {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentNullException(nameof(path));
 
-            var blockBlob = _container.GetBlockBlobReference(path);
-            return blockBlob.ExistsAsync();
+            var blockBlob = _container.GetBlobClient(path);
+            var response =  blockBlob.ExistsAsync();
+            return Task.FromResult(response.Result.Value);
         }
 
         public async Task<bool> SaveFileAsync(string path, Stream stream, CancellationToken cancellationToken = default) {
@@ -75,8 +79,13 @@ namespace Foundatio.Storage {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream));
             
-            var blockBlob = _container.GetBlockBlobReference(path);
-            await blockBlob.UploadFromStreamAsync(stream, null, null, null, cancellationToken).AnyContext();
+            var blockBlob = _container.GetBlobClient(path);
+            try {
+                var contentInfo = await blockBlob.UploadAsync(stream, null, cancellationToken).AnyContext();
+            }
+            catch(RequestFailedException) {
+               
+            }
 
             return true;
         }
@@ -87,11 +96,11 @@ namespace Foundatio.Storage {
             if (String.IsNullOrEmpty(newPath))
                 throw new ArgumentNullException(nameof(newPath));
 
-            var oldBlob = _container.GetBlockBlobReference(path);
+            var oldBlob = _container.GetBlobClient(path);
             if (!(await CopyFileAsync(path, newPath, cancellationToken).AnyContext()))
                 return false;
 
-            return await oldBlob.DeleteIfExistsAsync(DeleteSnapshotsOption.None, null, null, null, cancellationToken).AnyContext();
+            return await oldBlob.DeleteIfExistsAsync().AnyContext();
         }
 
         public async Task<bool> CopyFileAsync(string path, string targetPath, CancellationToken cancellationToken = default) {
@@ -100,22 +109,23 @@ namespace Foundatio.Storage {
             if (String.IsNullOrEmpty(targetPath))
                 throw new ArgumentNullException(nameof(targetPath));
 
-            var oldBlob = _container.GetBlockBlobReference(path);
-            var newBlob = _container.GetBlockBlobReference(targetPath);
+            var oldBlob = _container.GetBlobClient(path);
+            var newBlob = _container.GetBlobClient(targetPath);
 
-            await newBlob.StartCopyAsync(oldBlob, cancellationToken).AnyContext();
-            while (newBlob.CopyState.Status == CopyStatus.Pending)
-                await SystemClock.SleepAsync(50, cancellationToken).AnyContext();
-
-            return newBlob.CopyState.Status == CopyStatus.Success;
+            var val = await newBlob.StartCopyFromUriAsync(oldBlob.Uri,null, cancellationToken).AnyContext();
+            var response = val.WaitForCompletionAsync(cancellationToken);
+            // todo : SEE WHAT RESPONSE RETURNS FROM THE ABOVE METHOD
+            return (response.IsCompleted);
         }
+
 
         public Task<bool> DeleteFileAsync(string path, CancellationToken cancellationToken = default) {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentNullException(nameof(path));
 
-            var blockBlob = _container.GetBlockBlobReference(path);
-            return blockBlob.DeleteIfExistsAsync(DeleteSnapshotsOption.None, null, null, null, cancellationToken);
+            var blockBlob = _container.GetBlobClient(path);
+            var result = blockBlob.DeleteIfExistsAsync();
+            return Task.FromResult(result.Result.Value);
         }
 
         public async Task<int> DeleteFilesAsync(string searchPattern = null, CancellationToken cancellationToken = default) {
@@ -196,8 +206,8 @@ namespace Foundatio.Storage {
     }
 
     internal static class BlobListExtensions {
-        internal static IEnumerable<CloudBlockBlob> MatchesPattern(this IEnumerable<CloudBlockBlob> blobs, Regex patternRegex) {
-            return blobs.Where(blob => patternRegex == null || patternRegex.IsMatch(blob.ToFileInfo().Path));
+        internal static IEnumerable<BlobClient> MatchesPattern(this IEnumerable<BlobClient> blobs, Regex patternRegex) {
+            return blobs.Where(blob => patternRegex == null || patternRegex.IsMatch(blob.Name));
         }
     }
 }
