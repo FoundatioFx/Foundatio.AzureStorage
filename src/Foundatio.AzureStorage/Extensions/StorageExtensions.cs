@@ -9,8 +9,6 @@ namespace Foundatio.Azure.Extensions {
             if (blob.ContentLength == -1)
                 return null;
 
-
-
             return new FileSpec {
                 Path = name,
                 Size = blob.ContentLength,
@@ -18,5 +16,7 @@ namespace Foundatio.Azure.Extensions {
                 Modified = blob.LastModified.UtcDateTime
             };
         }
+
+
     }
 }

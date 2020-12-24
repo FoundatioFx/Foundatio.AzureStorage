@@ -186,20 +186,23 @@ namespace Foundatio.Storage {
             }
             prefix = prefix ?? String.Empty;
 
-            BlobContinuationToken continuationToken = null;
-            var blobs = new List<CloudBlockBlob>();
-            do {
-                var listingResult = await _container.ListBlobsSegmentedAsync(prefix, true, BlobListingDetails.Metadata, limit, continuationToken, null, null, cancellationToken).AnyContext();
-                continuationToken = listingResult.ContinuationToken;
-
-                // TODO: Implement paging
-                blobs.AddRange(listingResult.Results.OfType<CloudBlockBlob>().MatchesPattern(patternRegex));
-            } while (continuationToken != null && blobs.Count < limit.GetValueOrDefault(Int32.MaxValue));
+            var blobs = new List<BlobClient>();
+            await foreach (BlobItem blob in _container.GetBlobsAsync(BlobTraits.Metadata, BlobStates.All, prefix,cancellationToken)) {
+                blobs.Add (_container.GetBlobClient(blob.Name));
+            }
 
             if (limit.HasValue)
                 blobs = blobs.Take(limit.Value).ToList();
 
-            return blobs.Select(blob => blob.ToFileInfo());
+            blobs.AddRange(blobs.MatchesPattern(patternRegex));
+
+            List<FileSpec> list = new List<FileSpec>();
+            foreach(BlobClient blob in blobs) {
+                BlobProperties properties = await blob.GetPropertiesAsync().AnyContext();
+                list.Add(properties.ToFileInfo(blob.Name));
+            }
+
+            return list.ToArray();
         }
 
         public void Dispose() {}
