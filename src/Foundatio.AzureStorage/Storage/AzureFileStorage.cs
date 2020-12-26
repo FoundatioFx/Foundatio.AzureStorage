@@ -15,7 +15,6 @@ using Azure.Storage.Blobs.Models;
 
 namespace Foundatio.Storage {
     public class AzureFileStorage : IFileStorage {
-        // A container in the storage account used via BlobContainerClient
         private readonly BlobContainerClient _container;
         private readonly ISerializer _serializer;
 
@@ -24,7 +23,7 @@ namespace Foundatio.Storage {
                 throw new ArgumentNullException(nameof(options));
             // The storage account used via BlobServiceClient. / Create a BlobServiceClient object which will be used to create a container client
             //BlobServiceClient blobServiceClient = new BlobServiceClient(options.ConnectionString);
-            var _container = new BlobContainerClient(options.ConnectionString, options.ContainerName);
+            _container = new BlobContainerClient(options.ConnectionString, options.ContainerName);
             _container.CreateIfNotExistsAsync().GetAwaiter().GetResult();
             _serializer = options.Serializer ?? DefaultSerializer.Instance;
         }

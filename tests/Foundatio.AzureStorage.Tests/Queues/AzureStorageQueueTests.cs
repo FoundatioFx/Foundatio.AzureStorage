@@ -4,7 +4,6 @@ using Foundatio.Queues;
 using Foundatio.Tests.Queue;
 using Foundatio.Tests.Utility;
 using Microsoft.Extensions.Logging;
-using Microsoft.Azure.Storage.RetryPolicies;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -25,7 +24,6 @@ namespace Foundatio.Azure.Tests.Queue {
                 .Name(_queueName)
                 .Retries(retries)
                 //.RetryMultipliers(retryMultipliers ?? new[] { 1, 3, 5, 10 }) // TODO: Flow through the retry multiplier.
-                .RetryPolicy(retries <= 0 ? new NoRetry() : (IRetryPolicy)new ExponentialRetry(retryDelay.GetValueOrDefault(TimeSpan.FromMinutes(1)), retries))
                 .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
                 .DequeueInterval(TimeSpan.FromMilliseconds(100))
                 .LoggerFactory(Log));

@@ -81,7 +81,7 @@ namespace Foundatio.Queues {
         }
 
         protected override async Task<IQueueEntry<T>> DequeueImplAsync(CancellationToken linkedCancellationToken) {
-            var message = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, linkedCancellationToken).AnyContext();
+            var message = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
             var receivedMessage = message.Value;
             bool isTraceLogLevelEnabled = _logger.IsEnabled(LogLevel.Trace);
             
@@ -103,8 +103,11 @@ namespace Foundatio.Queues {
                 }
 
                 // Delete the message
-                await _queueReference.DeleteMessageAsync(receivedMessage[0].MessageId, receivedMessage[0].PopReceipt);
-
+                var deleteResponse = await _queueReference.DeleteMessageAsync(receivedMessage[0].MessageId, receivedMessage[0].PopReceipt);
+                if (deleteResponse.Status == 404) {
+                    // this means that message has been dequeued by another client
+                    // ask blake on what to do.
+                }
                 sw.Stop();
                 if (isTraceLogLevelEnabled) _logger.LogTrace("Waited to dequeue message: {Elapsed:g}", sw.Elapsed);
             }
@@ -125,7 +128,8 @@ namespace Foundatio.Queues {
         public override async Task RenewLockAsync(IQueueEntry<T> entry) {
             if (_logger.IsEnabled(LogLevel.Debug)) _logger.LogDebug("Queue {Name} renew lock item: {EntryId}", _options.Name, entry.Id);
             var azureQueueEntry = ToAzureEntryWithCheck(entry);
-            await _queueReference.UpdateMessageAsync(azureQueueEntry.UnderlyingMessage, _options.WorkItemTimeout, MessageUpdateFields.Visibility).AnyContext();
+            await _queueReference.UpdateMessageAsync(azureQueueEntry.UnderlyingMessage.MessageId, azureQueueEntry.UnderlyingMessage.PopReceipt, azureQueueEntry.UnderlyingMessage.Body, TimeSpan.Zero).AnyContext();
+
             await OnLockRenewedAsync(entry).AnyContext();
             if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Renew lock done: {EntryId}", entry.Id);
         }
@@ -136,7 +140,7 @@ namespace Foundatio.Queues {
                 throw new InvalidOperationException("Queue entry has already been completed or abandoned.");
 
             var azureQueueEntry = ToAzureEntryWithCheck(entry);
-            await _queueReference.DeleteMessageAsync(azureQueueEntry.UnderlyingMessage).AnyContext();
+            await _queueReference.DeleteMessageAsync(azureQueueEntry.UnderlyingMessage.MessageId, azureQueueEntry.UnderlyingMessage.PopReceipt).AnyContext();
 
             Interlocked.Increment(ref _completedCount);
             entry.MarkCompleted();
@@ -152,12 +156,12 @@ namespace Foundatio.Queues {
             var azureQueueEntry = ToAzureEntryWithCheck(entry);
             if (azureQueueEntry.Attempts > _options.Retries) {
                 await Task.WhenAll(
-                    _queueReference.DeleteMessageAsync(azureQueueEntry.UnderlyingMessage), 
-                    _deadletterQueueReference.AddMessageAsync(azureQueueEntry.UnderlyingMessage)
+                    _queueReference.DeleteMessageAsync(azureQueueEntry.UnderlyingMessage.MessageId, azureQueueEntry.UnderlyingMessage.PopReceipt), 
+                    _deadletterQueueReference.SendMessageAsync(azureQueueEntry.UnderlyingMessage.Body)
                 ).AnyContext();
             } else {
                 // Make the item visible immediately
-                await _queueReference.UpdateMessageAsync(azureQueueEntry.UnderlyingMessage, TimeSpan.Zero, MessageUpdateFields.Visibility).AnyContext();
+                await _queueReference.UpdateMessageAsync(azureQueueEntry.UnderlyingMessage.MessageId, azureQueueEntry.UnderlyingMessage.PopReceipt, azureQueueEntry.UnderlyingMessage.Body, TimeSpan.Zero).AnyContext();
             }
 
             Interlocked.Increment(ref _abandonedCount);
@@ -172,18 +176,14 @@ namespace Foundatio.Queues {
 
         protected override async Task<QueueStats> GetQueueStatsImplAsync() {
             if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Fetching stats.");
-            var sw = Stopwatch.StartNew();
-            await Task.WhenAll(
-                _queueReference.FetchAttributesAsync(),
-                _deadletterQueueReference.FetchAttributesAsync()
-            ).AnyContext();
-            sw.Stop();
-            if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Fetching stats took {Elapsed:g}.", sw.Elapsed);
+
+            var queuedMessageCount = await _queueReference.GetPropertiesAsync();
+            var deadletterQueueMessageCount = await _deadletterQueueReference.GetPropertiesAsync();
 
             return new QueueStats {
-                Queued = _queueReference.ApproximateMessageCount.GetValueOrDefault(),
+                Queued = queuedMessageCount.Value.ApproximateMessagesCount,
                 Working = 0,
-                Deadletter = _deadletterQueueReference.ApproximateMessageCount.GetValueOrDefault(),
+                Deadletter = deadletterQueueMessageCount.Value.ApproximateMessagesCount,
                 Enqueued = _enqueuedCount,
                 Dequeued = _dequeuedCount,
                 Completed = _completedCount,
