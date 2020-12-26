@@ -8,15 +8,15 @@ using Foundatio.Extensions;
 using Foundatio.Serializer;
 using Foundatio.Utility;
 using Microsoft.Extensions.Logging;
-using Microsoft.Azure.Storage;
-using Microsoft.Azure.Storage.Queue;
+using Azure.Storage;
+using Azure.Storage.Queues;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Foundatio.Queues {
     public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> where T : class {
         private readonly AsyncLock _lock = new AsyncLock();
-        private readonly CloudQueue _queueReference;
-        private readonly CloudQueue _deadletterQueueReference;
+        private readonly QueueClient _queueReference;
+        private readonly QueueClient _deadletterQueueReference;
         private long _enqueuedCount;
         private long _dequeuedCount;
         private long _completedCount;
@@ -27,14 +27,19 @@ namespace Foundatio.Queues {
         public AzureStorageQueue(AzureStorageQueueOptions<T> options) : base(options) {
             if (String.IsNullOrEmpty(options.ConnectionString))
                 throw new ArgumentException("ConnectionString is required.");
-            
-            var account = CloudStorageAccount.Parse(options.ConnectionString);
-            var client = account.CreateCloudQueueClient();
-            if (options.RetryPolicy != null)
-                client.DefaultRequestOptions.RetryPolicy = options.RetryPolicy;
+            QueueClientOptions queueClientOptions = new QueueClientOptions {
+                Retry = {
+                    Delay = TimeSpan.FromSeconds(2),     //The delay between retry attempts for a fixed approach or the delay on which to base 
+                                                         //calculations for a backoff-based approach
+                    MaxRetries = 5,                      //The maximum number of retry attempts before giving up
+                    MaxDelay = TimeSpan.FromSeconds(10)  //The maximum permissible delay between retry attempts
+                    }
+            };
+            QueueServiceClient queueServiceClient = new QueueServiceClient(options.ConnectionString, queueClientOptions );
+            var client = queueServiceClient.CreateQueue(_options.Name).Value;
 
-            _queueReference = client.GetQueueReference(_options.Name);
-            _deadletterQueueReference = client.GetQueueReference($"{_options.Name}-poison");
+            _queueReference = queueServiceClient.GetQueueClient(_options.Name);
+            _deadletterQueueReference = queueServiceClient.GetQueueClient($"{_options.Name}-poison");
         }
 
         public AzureStorageQueue(Builder<AzureStorageQueueOptionsBuilder<T>, AzureStorageQueueOptions<T>> config)
@@ -65,25 +70,27 @@ namespace Foundatio.Queues {
                 return null;
 
             Interlocked.Increment(ref _enqueuedCount);
-            var message = new CloudQueueMessage(_serializer.SerializeToBytes(data));
-            await _queueReference.AddMessageAsync(message).AnyContext();
+            var body = _serializer.SerializeToBytes(data);
+            var binaryData = new BinaryData(body);
+            var result = await _queueReference.SendMessageAsync(binaryData).AnyContext();
 
-            var entry = new QueueEntry<T>(message.Id, null, data, this, SystemClock.UtcNow, 0);
+            var entry = new QueueEntry<T>(result.Value.MessageId, null, data, this, SystemClock.UtcNow, 0);
             await OnEnqueuedAsync(entry).AnyContext();
 
-            return message.Id;
+            return result.Value.MessageId;
         }
 
         protected override async Task<IQueueEntry<T>> DequeueImplAsync(CancellationToken linkedCancellationToken) {
-            var message = await _queueReference.GetMessageAsync(_options.WorkItemTimeout, null, null, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
+            var message = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, linkedCancellationToken).AnyContext();
+            var receivedMessage = message.Value;
             bool isTraceLogLevelEnabled = _logger.IsEnabled(LogLevel.Trace);
             
-            if (message == null) {
+            if (receivedMessage == null) {
                 var sw = Stopwatch.StartNew();
                 var lastReport = DateTime.Now;
                 if (isTraceLogLevelEnabled) _logger.LogTrace("No message available to dequeue, waiting...");
 
-                while (message == null && !linkedCancellationToken.IsCancellationRequested) {
+                while (receivedMessage == null && !linkedCancellationToken.IsCancellationRequested) {
                     if (isTraceLogLevelEnabled && DateTime.Now.Subtract(lastReport) > TimeSpan.FromSeconds(10))
                          _logger.LogTrace("Still waiting for message to dequeue: {Elapsed:g}", sw.Elapsed);
 
@@ -92,22 +99,25 @@ namespace Foundatio.Queues {
                             await SystemClock.SleepAsync(_options.DequeueInterval, linkedCancellationToken).AnyContext();
                     } catch (OperationCanceledException) { }
 
-                    message = await _queueReference.GetMessageAsync(_options.WorkItemTimeout, null, null, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
+                    receivedMessage = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
                 }
+
+                // Delete the message
+                await _queueReference.DeleteMessageAsync(receivedMessage[0].MessageId, receivedMessage[0].PopReceipt);
 
                 sw.Stop();
                 if (isTraceLogLevelEnabled) _logger.LogTrace("Waited to dequeue message: {Elapsed:g}", sw.Elapsed);
             }
 
-            if (message == null) {
+            if (receivedMessage == null) {
                 if (isTraceLogLevelEnabled) _logger.LogTrace("No message was dequeued.");
                 return null;
             }
 
-            if (isTraceLogLevelEnabled) _logger.LogTrace("Dequeued message {Id}", message.Id);
+            if (isTraceLogLevelEnabled) _logger.LogTrace("Dequeued message {Id}", receivedMessage[0].MessageId);
             Interlocked.Increment(ref _dequeuedCount);
-            var data = _serializer.Deserialize<T>(message.AsBytes);
-            var entry = new AzureStorageQueueEntry<T>(message, data, this);
+            var data = _serializer.Deserialize<T>(receivedMessage[0].Body.ToArray());
+            var entry = new AzureStorageQueueEntry<T>(receivedMessage[0], data, this);
             await OnDequeuedAsync(entry).AnyContext();
             return entry;
         }

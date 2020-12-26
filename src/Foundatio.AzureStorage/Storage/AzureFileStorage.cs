@@ -22,7 +22,8 @@ namespace Foundatio.Storage {
         public AzureFileStorage(AzureFileStorageOptions options) {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
-            // The storage account used via BlobServiceClient
+            // The storage account used via BlobServiceClient. / Create a BlobServiceClient object which will be used to create a container client
+            //BlobServiceClient blobServiceClient = new BlobServiceClient(options.ConnectionString);
             var _container = new BlobContainerClient(options.ConnectionString, options.ContainerName);
             _container.CreateIfNotExistsAsync().GetAwaiter().GetResult();
             _serializer = options.Serializer ?? DefaultSerializer.Instance;
