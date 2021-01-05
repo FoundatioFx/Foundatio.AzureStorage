@@ -113,9 +113,8 @@ namespace Foundatio.Storage {
             var newBlob = _container.GetBlobClient(targetPath);
 
             var val = await newBlob.StartCopyFromUriAsync(oldBlob.Uri,null, cancellationToken).AnyContext();
-            var response = val.WaitForCompletionAsync(cancellationToken);
-            // todo : SEE WHAT RESPONSE RETURNS FROM THE ABOVE METHOD
-            return (response.IsCompleted);
+            await val.WaitForCompletionAsync(cancellationToken);
+            return val.HasCompleted;
         }
 
 
