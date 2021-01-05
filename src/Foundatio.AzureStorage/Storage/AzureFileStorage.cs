@@ -81,7 +81,7 @@ namespace Foundatio.Storage {
             
             var blockBlob = _container.GetBlobClient(path);
             try {
-                var contentInfo = await blockBlob.UploadAsync(stream, null, cancellationToken).AnyContext();
+                var contentInfo = await blockBlob.UploadAsync(stream, cancellationToken).AnyContext();
             }
             catch(RequestFailedException) {
                
@@ -187,6 +187,7 @@ namespace Foundatio.Storage {
             prefix = prefix ?? String.Empty;
 
             var blobs = new List<BlobClient>();
+            var patternMatchingBlobs = new List<BlobClient>();
             await foreach (BlobItem blob in _container.GetBlobsAsync(BlobTraits.Metadata, BlobStates.All, prefix,cancellationToken)) {
                 blobs.Add (_container.GetBlobClient(blob.Name));
             }
@@ -194,12 +195,14 @@ namespace Foundatio.Storage {
             if (limit.HasValue)
                 blobs = blobs.Take(limit.Value).ToList();
 
-            blobs.AddRange(blobs.MatchesPattern(patternRegex));
+            var filter = blobs.MatchesPattern(patternRegex);
+            patternMatchingBlobs.AddRange(filter);
+
 
             List<FileSpec> list = new List<FileSpec>();
-            foreach(BlobClient blob in blobs) {
-                BlobProperties properties = await blob.GetPropertiesAsync().AnyContext();
-                list.Add(properties.ToFileInfo(blob.Name));
+            foreach(BlobClient patternMatchingBlob in patternMatchingBlobs) {
+                BlobProperties properties = await patternMatchingBlob.GetPropertiesAsync().AnyContext();
+                list.Add(properties.ToFileInfo(patternMatchingBlob.Name));
             }
 
             return list.ToArray();
