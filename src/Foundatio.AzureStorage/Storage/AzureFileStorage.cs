@@ -39,7 +39,7 @@ namespace Foundatio.Storage {
 
             var blockBlob = _container.GetBlobClient(path);
             try {
-                return await blockBlob.OpenReadAsync(null, cancellationToken).AnyContext();
+                return await blockBlob.OpenReadAsync(new BlobOpenReadOptions(true), cancellationToken).AnyContext();
                 // All Blob service operations will throw a RequestFailedException instead of StorageException in v11 on failure with helpful ErrorCode
             } catch (RequestFailedException ex) {
                 if (ex.ErrorCode == BlobErrorCode.BlobNotFound)
