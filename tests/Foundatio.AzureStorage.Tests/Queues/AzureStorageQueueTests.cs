@@ -45,7 +45,7 @@ namespace Foundatio.Azure.Tests.Queue {
             return base.CanDequeueWithCancelledTokenAsync();
         }
 
-        [Fact]
+        [Fact(Skip = "Dequeue Time takes forever")]
         public override Task CanQueueAndDequeueMultipleWorkItemsAsync() {
             return base.CanQueueAndDequeueMultipleWorkItemsAsync();
         }

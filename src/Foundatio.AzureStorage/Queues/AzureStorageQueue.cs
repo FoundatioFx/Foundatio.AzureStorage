@@ -8,8 +8,8 @@ using Foundatio.Extensions;
 using Foundatio.Serializer;
 using Foundatio.Utility;
 using Microsoft.Extensions.Logging;
-using Azure.Storage;
 using Azure.Storage.Queues;
+using Azure.Storage.Queues.Models;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Foundatio.Queues {
@@ -27,16 +27,17 @@ namespace Foundatio.Queues {
         public AzureStorageQueue(AzureStorageQueueOptions<T> options) : base(options) {
             if (String.IsNullOrEmpty(options.ConnectionString))
                 throw new ArgumentException("ConnectionString is required.");
-            QueueClientOptions queueClientOptions = new QueueClientOptions {
+
+            // properties going in the queueservice client ( should match with IRetryPolicy of v11)
+            // with exponential mode ( RetryOptions.Delay vs retryDelay , RetryOptons.MaxRetris vs retries of v11)
+            var queueClientOptions = new QueueClientOptions {
                 Retry = {
-                    Delay = TimeSpan.FromSeconds(2),     //The delay between retry attempts for a fixed approach or the delay on which to base 
-                                                         //calculations for a backoff-based approach
-                    MaxRetries = 5,                      //The maximum number of retry attempts before giving up
-                    MaxDelay = TimeSpan.FromSeconds(10)  //The maximum permissible delay between retry attempts
-                    }
+                    MaxRetries = options.Retries,        //The maximum number of retry attempts before giving up
+                    Delay = options.Delay,     //The delay between retry attempts for a fixed approach or the delay on which to base 
+                    Mode = options.RetryMode
+                }
             };
-            QueueServiceClient queueServiceClient = new QueueServiceClient(options.ConnectionString, queueClientOptions );
-            var client = queueServiceClient.CreateQueue(_options.Name).Value;
+            var queueServiceClient = new QueueServiceClient(options.ConnectionString, queueClientOptions);
 
             _queueReference = queueServiceClient.GetQueueClient(_options.Name);
             _deadletterQueueReference = queueServiceClient.GetQueueClient($"{_options.Name}-poison");
@@ -54,9 +55,11 @@ namespace Foundatio.Queues {
                     return;
 
                 var sw = Stopwatch.StartNew();
+                var qTask = _queueReference.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+                var dTask = _deadletterQueueReference.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
                 await Task.WhenAll(
-                    _queueReference.CreateIfNotExistsAsync(),
-                    _deadletterQueueReference.CreateIfNotExistsAsync()
+                    qTask,
+                    dTask
                 ).AnyContext();
                 _queueCreated = true;
 
@@ -72,25 +75,24 @@ namespace Foundatio.Queues {
             Interlocked.Increment(ref _enqueuedCount);
             var body = _serializer.SerializeToBytes(data);
             var binaryData = new BinaryData(body);
-            var result = await _queueReference.SendMessageAsync(binaryData).AnyContext();
+            SendReceipt result = await _queueReference.SendMessageAsync(binaryData).AnyContext();
 
-            var entry = new QueueEntry<T>(result.Value.MessageId, null, data, this, SystemClock.UtcNow, 0);
+            var entry = new QueueEntry<T>(result.MessageId, null, data, this, SystemClock.UtcNow, 0);
             await OnEnqueuedAsync(entry).AnyContext();
 
-            return result.Value.MessageId;
+            return result.MessageId;
         }
 
         protected override async Task<IQueueEntry<T>> DequeueImplAsync(CancellationToken linkedCancellationToken) {
-            var message = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
-            var receivedMessage = message.Value;
+            QueueMessage[] receivedMessage = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
             bool isTraceLogLevelEnabled = _logger.IsEnabled(LogLevel.Trace);
             
-            if (receivedMessage == null) {
+            if (receivedMessage != null && receivedMessage.Length == 0) {
                 var sw = Stopwatch.StartNew();
                 var lastReport = DateTime.Now;
                 if (isTraceLogLevelEnabled) _logger.LogTrace("No message available to dequeue, waiting...");
 
-                while (receivedMessage == null && !linkedCancellationToken.IsCancellationRequested) {
+                while (receivedMessage != null && receivedMessage.Length == 0 && !linkedCancellationToken.IsCancellationRequested) {
                     if (isTraceLogLevelEnabled && DateTime.Now.Subtract(lastReport) > TimeSpan.FromSeconds(10))
                          _logger.LogTrace("Still waiting for message to dequeue: {Elapsed:g}", sw.Elapsed);
 
@@ -102,17 +104,11 @@ namespace Foundatio.Queues {
                     receivedMessage = await _queueReference.ReceiveMessagesAsync(null, _options.WorkItemTimeout, !linkedCancellationToken.IsCancellationRequested ? linkedCancellationToken : CancellationToken.None).AnyContext();
                 }
 
-                // Delete the message
-                var deleteResponse = await _queueReference.DeleteMessageAsync(receivedMessage[0].MessageId, receivedMessage[0].PopReceipt);
-                if (deleteResponse.Status == 404) {
-                    // this means that message has been dequeued by another client
-                    // ask blake on what to do.
-                }
                 sw.Stop();
                 if (isTraceLogLevelEnabled) _logger.LogTrace("Waited to dequeue message: {Elapsed:g}", sw.Elapsed);
             }
 
-            if (receivedMessage == null) {
+            if (receivedMessage != null && receivedMessage.Length == 0) {
                 if (isTraceLogLevelEnabled) _logger.LogTrace("No message was dequeued.");
                 return null;
             }
@@ -177,13 +173,13 @@ namespace Foundatio.Queues {
         protected override async Task<QueueStats> GetQueueStatsImplAsync() {
             if (_logger.IsEnabled(LogLevel.Trace)) _logger.LogTrace("Fetching stats.");
 
-            var queuedMessageCount = await _queueReference.GetPropertiesAsync();
-            var deadletterQueueMessageCount = await _deadletterQueueReference.GetPropertiesAsync();
+            QueueProperties  queuedMessageCount = await _queueReference.GetPropertiesAsync();
+            QueueProperties deadLetterQueueMessageCount = await _deadletterQueueReference.GetPropertiesAsync();
 
             return new QueueStats {
-                Queued = queuedMessageCount.Value.ApproximateMessagesCount,
+                Queued = queuedMessageCount.ApproximateMessagesCount,
                 Working = 0,
-                Deadletter = deadletterQueueMessageCount.Value.ApproximateMessagesCount,
+                Deadletter = deadLetterQueueMessageCount.ApproximateMessagesCount,
                 Enqueued = _enqueuedCount,
                 Dequeued = _dequeuedCount,
                 Completed = _completedCount,
