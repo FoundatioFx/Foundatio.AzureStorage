@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -14,6 +16,9 @@ using Microsoft.Azure.Storage.Blob;
 
 namespace Foundatio.Storage {
     public class AzureFileStorage : IFileStorage {
+        private const int cacheSize = 64;
+        private static readonly Queue<Pipe> s_pipeCache = new Queue<Pipe>(cacheSize);
+
         private readonly Task _containerCreation;
         private readonly CloudBlobContainer _container;
         private readonly ISerializer _serializer;
@@ -42,7 +47,18 @@ namespace Foundatio.Storage {
 
             var blockBlob = _container.GetBlockBlobReference(path);
             try {
-                return await blockBlob.OpenReadAsync(null, null, null, cancellationToken).AnyContext();
+                await blockBlob.FetchAttributesAsync().AnyContext();
+                var option = new BlobRequestOptions() {
+                    // As we are transmitting over TLS we don't need the MD5 validation
+                    DisableContentMD5Validation = false
+                };
+                var blobStream = await blockBlob.OpenReadAsync(null, option, null, cancellationToken).AnyContext();
+                if (blockBlob.Metadata.TryGetValue(StorageExtensions.UncompressedLength, out _)) {
+                    // If compressed return decompressing Stream
+                    return new GZipStream(blobStream, CompressionMode.Decompress);
+                }
+                // Otherwise return original Stream
+                return blobStream;
             } catch (StorageException ex) {
                 if (ex.RequestInformation.HttpStatusCode == 404)
                     return null;
@@ -86,7 +102,46 @@ namespace Foundatio.Storage {
             await EnsureContainerCreated().AnyContext();
 
             var blockBlob = _container.GetBlockBlobReference(path);
-            await blockBlob.UploadFromStreamAsync(stream, null, null, null, cancellationToken).AnyContext();
+
+            // GZipStream doesn't allow it to be the source of compressed data, and needs to go via an intermediate like MemoryStream.
+            // Rather than buffering everything in memory this way, we use Pipelines to invert the Stream, so the compression can be
+            // streamed on the fly.
+            var pipe = RentPipe();
+            var gzipStream = new GZipStream(pipe.Writer.AsStream(), CompressionMode.Compress);
+            var uploadTask = Task.CompletedTask;
+            try {
+                if (!stream.CanSeek) {
+                    // Need to record the uncompressed size in the metadata
+                    stream = new CountingStream(stream);
+                }
+
+                var copyTask = stream.CopyToAsync(gzipStream);
+
+                var option = new BlobRequestOptions() {
+                    // As we are transmitting over TLS we don't need the MD5 validation
+                    DisableContentMD5Validation = false
+                };
+                uploadTask = blockBlob.UploadFromStreamAsync(pipe.Reader.AsStream(), null, option, null, cancellationToken);
+
+                await copyTask.AnyContext();
+                await gzipStream.FlushAsync().AnyContext();
+            } finally {
+                gzipStream.Dispose();
+                await pipe.Writer.CompleteAsync().AnyContext();
+                await uploadTask.AnyContext();
+                await pipe.Reader.CompleteAsync().AnyContext();
+            }
+
+            ReturnPipe(pipe);
+
+            // Set headers
+            if (path.EndsWith(".json")) {
+                blockBlob.Properties.ContentType = "application/json";
+            }
+            blockBlob.Properties.ContentEncoding = "gzip";
+            await blockBlob.SetPropertiesAsync().AnyContext();
+            blockBlob.Metadata.Add(StorageExtensions.UncompressedLength, stream.Length.ToString((IFormatProvider)null));
+            await blockBlob.SetMetadataAsync().AnyContext();
 
             return true;
         }
@@ -160,7 +215,7 @@ namespace Foundatio.Storage {
             int pagingLimit = pageSize;
             int skip = (page - 1) * pagingLimit;
             if (pagingLimit < Int32.MaxValue)
-                pagingLimit = pagingLimit + 1;
+                pagingLimit++;
 
             var list = (await GetFileListAsync(searchPattern, pagingLimit, skip, cancellationToken).AnyContext()).ToList();
             bool hasMore = false;
@@ -190,7 +245,7 @@ namespace Foundatio.Storage {
                 int slashPos = searchPattern.LastIndexOf('/');
                 prefix = slashPos >= 0 ? searchPattern.Substring(0, slashPos) : String.Empty;
             }
-            prefix = prefix ?? String.Empty;
+            prefix ??= String.Empty;
 
             await EnsureContainerCreated().AnyContext();
 
@@ -212,7 +267,72 @@ namespace Foundatio.Storage {
 
         private Task EnsureContainerCreated() => _containerCreation;
 
+        private static Pipe RentPipe() {
+            var cache = s_pipeCache;
+            lock (cache) {
+                if (cache.Count > 0)
+                    return cache.Dequeue();
+            }
+
+            return new Pipe();
+        }
+
+        private static void ReturnPipe(Pipe pipe) {
+            pipe.Reset();
+            var cache = s_pipeCache;
+            lock (cache) {
+                if (cache.Count < cacheSize)
+                    cache.Enqueue(pipe);
+            }
+        }
+
         public void Dispose() {}
+
+        // Used to get the uncompressed length from a Stream that doesn't support querying it upfront
+        private class CountingStream : Stream {
+            private readonly Stream stream;
+            private long readLength = 0;
+
+            public CountingStream(Stream stream) {
+                this.stream = stream;
+            }
+
+            public override long Length => readLength;
+
+            public override long Position { get => readLength; set => throw new NotSupportedException(); }
+
+            public override int Read(byte[] buffer, int offset, int count) {
+                int amount = stream.Read(buffer, offset, count);
+                readLength += amount;
+                return amount;
+            }
+
+            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) {
+                int amount = await stream.ReadAsync(buffer, offset, count, cancellationToken);
+                readLength += amount;
+                return amount;
+            }
+
+            public override int EndRead(IAsyncResult asyncResult) {
+                int amount = stream.EndRead(asyncResult);
+                readLength += amount;
+                return amount;
+            }
+
+            public override bool CanRead => stream.CanRead;
+
+            public override bool CanSeek => false;
+
+            public override bool CanWrite => false;
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            public override void Flush() => throw new NotSupportedException();
+        }
     }
 
     internal static class BlobListExtensions {

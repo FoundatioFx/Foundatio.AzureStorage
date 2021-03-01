@@ -17,6 +17,11 @@ namespace Foundatio.Extensions {
         }
 
         [DebuggerStepThrough]
+        public static ConfiguredValueTaskAwaitable AnyContext(this ValueTask task) {
+            return task.ConfigureAwait(continueOnCapturedContext: false);
+        }
+
+        [DebuggerStepThrough]
         public static ConfiguredTaskAwaitable<TResult> AnyContext<TResult>(this AwaitableDisposable<TResult> task) where TResult : IDisposable {
             return task.ConfigureAwait(continueOnCapturedContext: false);
         }
