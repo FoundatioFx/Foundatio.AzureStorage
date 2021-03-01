@@ -8,6 +8,7 @@
     <PackageReference Include="Foundatio" Version="10.0.2" Condition="'$(ReferenceFoundatioSource)' == '' OR '$(ReferenceFoundatioSource)' == 'false'" />
     <PackageReference Include="Microsoft.Azure.Storage.Blob" Version="11.0" />
     <PackageReference Include="Microsoft.Azure.Storage.Queue" Version="11.0" />
+    <PackageReference Include="System.IO.Pipelines" Version="5.0.1" />
 
     <ProjectReference Include="..\..\..\Foundatio\src\Foundatio\Foundatio.csproj" Condition="'$(ReferenceFoundatioSource)' == 'true'" />
   </ItemGroup>
