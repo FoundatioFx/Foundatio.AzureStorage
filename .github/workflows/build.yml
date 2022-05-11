@@ -1,9 +1,6 @@
 name: Build
 on: [push, pull_request]
 
-env:
-  ConnectionStrings__AzureStorageConnectionString: ${{ secrets.AZURE_STORAGE }}
-
 jobs:
   build:
     uses: FoundatioFx/Foundatio/.github/workflows/build-workflow.yml@master
