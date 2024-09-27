@@ -5,10 +5,6 @@ services:
       - 10000:10000
       - 10001:10001
       - 10002:10002
-    deploy:
-      resources:
-        limits:
-          memory: 1g
 
   ready:
     image: andrewlock/wait-for-dependencies
