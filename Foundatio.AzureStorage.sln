@@ -11,6 +11,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		build\common.props = build\common.props
 		README.md = README.md
 		docker-compose.yml = docker-compose.yml
+		tests\Directory.Build.props = tests\Directory.Build.props
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Foundatio.AzureStorage.Tests", "tests\Foundatio.AzureStorage.Tests\Foundatio.AzureStorage.Tests.csproj", "{9832E1F4-C826-4704-890A-00F330BC5913}"
