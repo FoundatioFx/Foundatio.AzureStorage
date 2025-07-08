@@ -11,7 +11,7 @@
       },
       "args": [
         "build",
-        "${workspaceFolder}/Foundatio.AzureStorage.sln",
+        "${workspaceFolder}/Foundatio.AzureStorage.slnx",
         "/p:GenerateFullPaths=true"
       ],
       "problemMatcher": "$msCompile"
@@ -32,7 +32,7 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "pack", 
+      "label": "pack",
       "command": "dotnet pack -c Release -o ${workspaceFolder}/artifacts",
       "type": "shell",
       "problemMatcher": []
