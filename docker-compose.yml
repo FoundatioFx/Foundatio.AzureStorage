@@ -11,5 +11,3 @@ services:
     command: azurite:10000
     depends_on:
       - azurite
-
-
