@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
+using Azure.Core;
 using Foundatio.Queues;
 using Foundatio.Tests.Queue;
 using Foundatio.Tests.Utility;
-using Microsoft.Azure.Storage.RetryPolicies;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using Xunit.Abstractions;
@@ -14,7 +14,9 @@ public class AzureStorageQueueTests : QueueTestBase
 {
     private readonly string _queueName = "foundatio-" + Guid.NewGuid().ToString("N").Substring(10);
 
-    public AzureStorageQueueTests(ITestOutputHelper output) : base(output) { }
+    public AzureStorageQueueTests(ITestOutputHelper output) : base(output)
+    {
+    }
 
     protected override IQueue<SimpleWorkItem> GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[] retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider timeProvider = null)
     {
@@ -22,12 +24,15 @@ public class AzureStorageQueueTests : QueueTestBase
         if (String.IsNullOrEmpty(connectionString))
             return null;
 
+        // TODO: We could use ExponentialRetry here if we wanted to test that as well. Could it use the same as options (into a shared helper) public Func<int, TimeSpan> RetryDelay { get; set; } = attempt =>
+        // TimeSpan.FromSeconds(Math.Pow(2, attempt)) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 100));
+
         _logger.LogDebug("Queue Id: {Name}", _queueName);
         return new AzureStorageQueue<SimpleWorkItem>(o => o
             .ConnectionString(connectionString)
             .Name(_queueName)
             .Retries(retries)
-            .RetryPolicy(retries <= 0 ? new NoRetry() : new ExponentialRetry(retryDelay.GetValueOrDefault(TimeSpan.FromMinutes(1)), retries))
+            .RetryDelay(_ => retries <= 0 ? TimeSpan.Zero : retryDelay.GetValueOrDefault(TimeSpan.FromMinutes(1)))
             .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
             .DequeueInterval(TimeSpan.FromSeconds(1))
             .MetricsPollingInterval(TimeSpan.Zero)
@@ -41,6 +46,7 @@ public class AzureStorageQueueTests : QueueTestBase
         queue?.Dispose();
         return Task.CompletedTask;
     }
+
     [Fact]
     public override Task CanQueueAndDequeueWorkItemAsync()
     {
@@ -53,7 +59,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanQueueAndDequeueWorkItemWithDelayAsync();
     }
 
-    [Fact(Skip = "Storage Queues don't support the round tripping of user headers for values like correlation id")]
+    [Fact(Skip = "Azure Storage Queue does not support CorrelationId or Properties - only message body is persisted")]
     public override Task CanUseQueueOptionsAsync()
     {
         return base.CanUseQueueOptionsAsync();
@@ -119,7 +125,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanHandleErrorInWorkerAsync();
     }
 
-    [Fact(Skip = "CompleteAsync after timeout will not throw")]
+    [Fact(Skip = "Azure Storage Queue handles visibility timeout natively; no client-side auto-abandon")]
     public override Task WorkItemsWillTimeoutAsync()
     {
         return base.WorkItemsWillTimeoutAsync();
@@ -143,7 +149,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanHaveMultipleQueueInstancesAsync();
     }
 
-    [Fact(Skip = "TODO: Retry delays are currently not applied to abandoned items")]
+    [Fact]
     public override Task CanDelayRetryAsync()
     {
         return base.CanDelayRetryAsync();
@@ -203,7 +209,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.VerifyDelayedRetryAttemptsAsync();
     }
 
-    [Fact(Skip = "Storage Queues has no queue stats for abandoned, it just increments the queued count and decrements the working count. Only the entry attribute ApproximateNumberOfMessages is available.")]
+    [Fact(Skip = "Azure Storage Queue handles visibility timeout natively; no client-side auto-abandon")]
     public override Task CanHandleAutoAbandonInWorker()
     {
         return base.CanHandleAutoAbandonInWorker();

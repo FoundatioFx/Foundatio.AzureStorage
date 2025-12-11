@@ -170,8 +170,8 @@ public class AzureStorageTests : FileStorageTestsBase
             var container = storage is AzureFileStorage azureFileStorage ? azureFileStorage.Container : null;
             Assert.NotNull(container);
 
-            var blockBlob = container.GetBlockBlobReference("EmptyFolder/");
-            await blockBlob.UploadFromStreamAsync(new MemoryStream(), null, null, null);
+            var blobClient = container.GetBlobClient("EmptyFolder/");
+            await blobClient.UploadAsync(new MemoryStream());
 
             result = await storage.GetPagedFileListAsync();
             Assert.False(result.HasMore);
