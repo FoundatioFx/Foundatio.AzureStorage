@@ -41,7 +41,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         _logger.LogTrace("Checking if {Container} container exists", _container.Name);
         var response = _container.CreateIfNotExists();
         if (response != null)
-            _logger.LogInformation("Created {Container}", _container.Name);
+            _logger.LogDebug("Created {Container}", _container.Name);
     }
 
     public AzureFileStorage(Builder<AzureFileStorageOptionsBuilder, AzureFileStorageOptions> config)
@@ -164,7 +164,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
 
         string normalizedPath = NormalizePath(path);
         string normalizedNewPath = NormalizePath(newPath);
-        _logger.LogInformation("Renaming {Path} to {NewPath}", normalizedPath, normalizedNewPath);
+        _logger.LogDebug("Renaming {Path} to {NewPath}", normalizedPath, normalizedNewPath);
 
         try
         {
@@ -199,7 +199,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
 
         string normalizedPath = NormalizePath(path);
         string normalizedTargetPath = NormalizePath(targetPath);
-        _logger.LogInformation("Copying {Path} to {TargetPath}", normalizedPath, normalizedTargetPath);
+        _logger.LogDebug("Copying {Path} to {TargetPath}", normalizedPath, normalizedTargetPath);
 
         try
         {
@@ -259,7 +259,8 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         int count = 0;
 
         // TODO: We could batch this, but we should ensure the batch isn't thousands of files.
-        _logger.LogInformation("Deleting {FileCount} files matching {SearchPattern}", files.Count, searchPattern);
+        _logger.LogDebug("Deleting {FileCount} files matching {SearchPattern}", files.Count, searchPattern);
+
         foreach (var file in files)
         {
             await DeleteFileAsync(file.Path, cancellationToken).AnyContext();
@@ -312,7 +313,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         var criteria = GetRequestCriteria(searchPattern);
 
         int totalLimit = limit.GetValueOrDefault(Int32.MaxValue) < Int32.MaxValue
-            ? skip.GetValueOrDefault() + limit.Value
+            ? skip.GetValueOrDefault() + limit.GetValueOrDefault()
             : Int32.MaxValue;
 
         _logger.LogTrace("Getting file list: Prefix={Prefix} Pattern={Pattern} Limit={Limit}", criteria.Prefix, criteria.Pattern, totalLimit);
@@ -364,12 +365,12 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         };
     }
 
-    private string NormalizePath(string path)
+    private static string NormalizePath(string path)
     {
         return path?.Replace('\\', '/');
     }
 
-    private class SearchCriteria
+    private record SearchCriteria
     {
         public string Prefix { get; set; }
         public Regex Pattern { get; set; }
@@ -391,7 +392,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         {
             patternRegex = new Regex($"^{Regex.Escape(normalizedSearchPattern).Replace("\\*", ".*?")}$");
             int slashPos = normalizedSearchPattern.LastIndexOf('/');
-            prefix = slashPos >= 0 ? normalizedSearchPattern.Substring(0, slashPos) : String.Empty;
+            prefix = slashPos >= 0 ? normalizedSearchPattern[..slashPos] : String.Empty;
         }
 
         return new SearchCriteria

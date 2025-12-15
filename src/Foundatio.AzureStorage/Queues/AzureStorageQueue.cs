@@ -108,7 +108,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             return null;
         }
 
-        // If no message and not cancelled, poll with fixed interval
+        // If no message and not canceled, poll with fixed interval
         // Note: Azure Storage Queue doesn't support long-polling, so we must poll
         if (message == null)
         {
@@ -366,7 +366,10 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 {
                     queueEntry = await DequeueImplAsync(linkedCancellationToken.Token).AnyContext();
                 }
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException)
+                {
+                    // Ignore cancellation
+                }
 
                 if (linkedCancellationToken.IsCancellationRequested || queueEntry == null)
                     continue;

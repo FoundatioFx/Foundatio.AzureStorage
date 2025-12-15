@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Azure.Core;
 
 namespace Foundatio.Queues;
@@ -114,6 +114,7 @@ public class AzureStorageQueueOptionsBuilder<T> : SharedQueueOptionsBuilder<T, A
     public AzureStorageQueueOptionsBuilder<T> ConfigureRetry(Action<RetryOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
+
         Target.ConfigureRetry = configure;
         return this;
     }

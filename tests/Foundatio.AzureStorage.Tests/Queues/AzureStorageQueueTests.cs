@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using Azure.Core;
 using Foundatio.Queues;
 using Foundatio.Tests.Queue;
 using Foundatio.Tests.Utility;
@@ -24,15 +23,11 @@ public class AzureStorageQueueTests : QueueTestBase
         if (String.IsNullOrEmpty(connectionString))
             return null;
 
-        // TODO: We could use ExponentialRetry here if we wanted to test that as well. Could it use the same as options (into a shared helper) public Func<int, TimeSpan> RetryDelay { get; set; } = attempt =>
-        // TimeSpan.FromSeconds(Math.Pow(2, attempt)) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 100));
-
         _logger.LogDebug("Queue Id: {Name}", _queueName);
         return new AzureStorageQueue<SimpleWorkItem>(o => o
             .ConnectionString(connectionString)
             .Name(_queueName)
             .Retries(retries)
-            .RetryDelay(_ => retries <= 0 ? TimeSpan.Zero : retryDelay.GetValueOrDefault(TimeSpan.FromMinutes(1)))
             .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
             .DequeueInterval(TimeSpan.FromSeconds(1))
             .MetricsPollingInterval(TimeSpan.Zero)

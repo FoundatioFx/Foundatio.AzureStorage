@@ -12,7 +12,9 @@ namespace Foundatio.Azure.Tests.Storage;
 
 public class AzureStorageTests : FileStorageTestsBase
 {
-    public AzureStorageTests(ITestOutputHelper output) : base(output) { }
+    public AzureStorageTests(ITestOutputHelper output) : base(output)
+    {
+    }
 
     protected override IFileStorage GetStorage()
     {
@@ -171,7 +173,8 @@ public class AzureStorageTests : FileStorageTestsBase
             Assert.NotNull(container);
 
             var blobClient = container.GetBlobClient("EmptyFolder/");
-            await blobClient.UploadAsync(new MemoryStream());
+            using var ms = new MemoryStream();
+            await blobClient.UploadAsync(ms);
 
             result = await storage.GetPagedFileListAsync();
             Assert.False(result.HasMore);
