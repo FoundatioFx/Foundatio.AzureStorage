@@ -76,22 +76,16 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
         Interlocked.Increment(ref _enqueuedCount);
 
-        // Wrap data with metadata in an envelope (required for CorrelationId and Properties support)
-        // TODO: Consider adding backward-compatible deserialization to handle pre-migration messages that weren't wrapped in an envelope
-        var envelope = new AzureStorageQueueEnvelope<T>
-        {
-            CorrelationId = options.CorrelationId,
-            Properties = options.Properties,
-            Value = data
-        };
-
-        var messageBody = new BinaryData(_serializer.SerializeToBytes(envelope));
+        // Note: CorrelationId and Properties from QueueEntryOptions are not persisted.
+        // Azure Storage Queue only supports a message body. Wrapping in an envelope would
+        // support these features but would break backward compatibility with existing messages.
+        var messageBody = new BinaryData(_serializer.SerializeToBytes(data));
         var response = await _queueClient.Value.SendMessageAsync(
             messageBody,
             visibilityTimeout: options.DeliveryDelay,
             cancellationToken: CancellationToken.None).AnyContext();
 
-        var entry = new QueueEntry<T>(response.Value.MessageId, options.CorrelationId, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0);
+        var entry = new QueueEntry<T>(response.Value.MessageId, null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0);
         await OnEnqueuedAsync(entry).AnyContext();
 
         _logger.LogTrace("Enqueued message {MessageId}", response.Value.MessageId);
@@ -161,9 +155,9 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             message.MessageId, insertedOn, nowUtc, queueTime.TotalMilliseconds, linkedCancellationToken.IsCancellationRequested);
         Interlocked.Increment(ref _dequeuedCount);
 
-        // Deserialize the envelope to get data and metadata
-        var envelope = _serializer.Deserialize<AzureStorageQueueEnvelope<T>>(message.Body.ToArray());
-        var entry = new AzureStorageQueueEntry<T>(message, envelope, this);
+        // Deserialize the message body directly (no envelope wrapper for backward compatibility)
+        var data = _serializer.Deserialize<T>(message.Body.ToArray());
+        var entry = new AzureStorageQueueEntry<T>(message, data, this);
 
         await OnDequeuedAsync(entry).AnyContext();
         _logger.LogTrace("Dequeued message: {QueueEntryId}", message.MessageId);
@@ -404,15 +398,4 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
         return azureQueueEntry;
     }
-}
-
-/// <summary>
-/// Envelope for wrapping queue data with metadata (correlation id, properties).
-/// Azure Storage Queue only supports a message body, so we serialize this entire envelope.
-/// </summary>
-public class AzureStorageQueueEnvelope<T>
-{
-    public string CorrelationId { get; set; }
-    public IDictionary<string, string> Properties { get; set; }
-    public T Value { get; set; }
 }

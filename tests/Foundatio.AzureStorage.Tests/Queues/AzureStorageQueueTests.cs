@@ -59,7 +59,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanQueueAndDequeueWorkItemWithDelayAsync();
     }
 
-    [Fact]
+    [Fact(Skip = "Azure Storage Queue does not support CorrelationId or Properties - only message body is persisted")]
     public override Task CanUseQueueOptionsAsync()
     {
         return base.CanUseQueueOptionsAsync();
@@ -125,7 +125,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanHandleErrorInWorkerAsync();
     }
 
-    [Fact]
+    [Fact(Skip = "Azure Storage Queue handles visibility timeout natively; no client-side auto-abandon")]
     public override Task WorkItemsWillTimeoutAsync()
     {
         return base.WorkItemsWillTimeoutAsync();
@@ -209,7 +209,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.VerifyDelayedRetryAttemptsAsync();
     }
 
-    [Fact]
+    [Fact(Skip = "Azure Storage Queue handles visibility timeout natively; no client-side auto-abandon")]
     public override Task CanHandleAutoAbandonInWorker()
     {
         return base.CanHandleAutoAbandonInWorker();
