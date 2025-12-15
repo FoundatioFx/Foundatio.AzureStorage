@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -21,8 +21,8 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     private readonly BlobContainerClient _container;
     private readonly ISerializer _serializer;
     private readonly ILoggerFactory _loggerFactory;
-    protected readonly ILogger _logger;
-    protected readonly TimeProvider _timeProvider;
+    private readonly ILogger _logger;
+    private readonly TimeProvider _timeProvider;
 
     public AzureFileStorage(AzureFileStorageOptions options)
     {
@@ -45,7 +45,9 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     }
 
     public AzureFileStorage(Builder<AzureFileStorageOptionsBuilder, AzureFileStorageOptions> config)
-        : this(config(new AzureFileStorageOptionsBuilder()).Build()) { }
+        : this(config(new AzureFileStorageOptionsBuilder()).Build())
+    {
+    }
 
     ISerializer IHaveSerializer.Serializer => _serializer;
     ILogger IHaveLogger.Logger => _logger;
@@ -75,7 +77,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
                 _ => throw new NotSupportedException($"Stream mode {streamMode} is not supported.")
             };
         }
-        catch (RequestFailedException ex) when (ex.Status == 404)
+        catch (RequestFailedException ex) when (ex.Status is 404)
         {
             _logger.LogDebug(ex, "[{Status}] Unable to get file stream for {Path}: File Not Found", ex.Status, normalizedPath);
             return null;
@@ -83,7 +85,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         catch (RequestFailedException ex)
         {
             _logger.LogError(ex, "[{Status}] Unable to get file stream for {Path}: {Message}", ex.Status, normalizedPath, ex.Message);
-            throw;
+            throw new StorageException("Unable to get file stream.", ex);
         }
     }
 
@@ -100,7 +102,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
             var properties = await blobClient.GetPropertiesAsync().AnyContext();
             return ToFileInfo(normalizedPath, properties.Value);
         }
-        catch (RequestFailedException ex) when (ex.Status == 404)
+        catch (RequestFailedException ex) when (ex.Status is 404)
         {
             _logger.LogDebug(ex, "[{Status}] Unable to get file info for {Path}: File Not Found", ex.Status, normalizedPath);
             return null;
@@ -205,21 +207,22 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
             var targetBlob = _container.GetBlobClient(normalizedTargetPath);
 
             var copyOperation = await targetBlob.StartCopyFromUriAsync(sourceBlob.Uri, cancellationToken: cancellationToken).AnyContext();
-            // TODO: Instead of true should we be checking copyOperation.HasCompleted? and copyOperation.UpdateStatusAsync
-            // Wait for copy to complete
-            while (true)
-            {
-                var properties = await targetBlob.GetPropertiesAsync(cancellationToken: cancellationToken).AnyContext();
-                if (properties.Value.CopyStatus == CopyStatus.Success)
-                    return true;
-                if (properties.Value.CopyStatus == CopyStatus.Failed || properties.Value.CopyStatus == CopyStatus.Aborted)
-                {
-                    _logger.LogError("Copy operation failed for {Path} to {TargetPath}: {CopyStatus}", normalizedPath, normalizedTargetPath, properties.Value.CopyStatus);
-                    return false;
-                }
 
-                await _timeProvider.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).AnyContext();
+            // Wait for copy operation to complete
+            await copyOperation.WaitForCompletionAsync(cancellationToken).ConfigureAwait(false);
+            if (!copyOperation.HasCompleted)
+            {
+                _logger.LogError("Copy operation did not complete for {Path} to {TargetPath}", normalizedPath, normalizedTargetPath);
+                return false;
             }
+
+            // Check final status
+            var properties = await targetBlob.GetPropertiesAsync(cancellationToken: cancellationToken).AnyContext();
+            if (properties.Value.CopyStatus == CopyStatus.Success)
+                return true;
+
+            _logger.LogError("Copy operation failed for {Path} to {TargetPath}: {CopyStatus}", normalizedPath, normalizedTargetPath, properties.Value.CopyStatus);
+            return false;
         }
         catch (RequestFailedException ex)
         {
@@ -341,24 +344,22 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
 
     private static FileSpec ToFileInfo(BlobItem blob)
     {
-        // TODO: We used to check if Properties.Length was -1 in old storage extension and return null. I'm not sure why this was ever needed. But if we do we need to be sure we filter nulls out.
         return new FileSpec
         {
             Path = blob.Name,
             Size = blob.Properties.ContentLength ?? -1,
-            Created = blob.Properties.LastModified?.UtcDateTime ?? DateTime.MinValue,
+            Created = blob.Properties.CreatedOn?.UtcDateTime ?? DateTime.MinValue,
             Modified = blob.Properties.LastModified?.UtcDateTime ?? DateTime.MinValue
         };
     }
 
     private static FileSpec ToFileInfo(string path, BlobProperties properties)
     {
-        // TODO: We used to check if Properties.Length was -1 in old storage extension and return null. I'm not sure why this was ever needed. But if we do we need to be sure we filter nulls out.
         return new FileSpec
         {
             Path = path,
             Size = properties.ContentLength,
-            Created = properties.LastModified.UtcDateTime,
+            Created = properties.CreatedOn.UtcDateTime,
             Modified = properties.LastModified.UtcDateTime
         };
     }
