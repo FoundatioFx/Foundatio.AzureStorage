@@ -31,7 +31,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             throw new ArgumentException("ConnectionString is required.");
 
         var clientOptions = new QueueClientOptions();
-        if (options.UseBase64Encoding)
+        if (options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Legacy)
             clientOptions.MessageEncoding = QueueMessageEncoding.Base64;
 
         options.ConfigureRetry?.Invoke(clientOptions.Retry);
@@ -76,10 +76,26 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
         Interlocked.Increment(ref _enqueuedCount);
 
-        // Note: CorrelationId and Properties from QueueEntryOptions are not persisted.
-        // Azure Storage Queue only supports a message body. Wrapping in an envelope would
-        // support these features but would break backward compatibility with existing messages.
-        var messageBody = new BinaryData(_serializer.SerializeToBytes(data));
+        byte[] messageBodyBytes;
+
+        if (_options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default)
+        {
+            // Wrap in envelope to preserve CorrelationId and Properties
+            var envelope = new QueueMessageEnvelope<T>
+            {
+                CorrelationId = options.CorrelationId,
+                Properties = options.Properties,
+                Data = data
+            };
+            messageBodyBytes = _serializer.SerializeToBytes(envelope);
+        }
+        else
+        {
+            // Legacy mode: serialize data directly for backward compatibility
+            messageBodyBytes = _serializer.SerializeToBytes(data);
+        }
+
+        var messageBody = new BinaryData(messageBodyBytes);
         var response = await _queueClient.Value.SendMessageAsync(
             messageBody,
             visibilityTimeout: options.DeliveryDelay,
@@ -155,9 +171,25 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             message.MessageId, insertedOn, nowUtc, queueTime.TotalMilliseconds, linkedCancellationToken.IsCancellationRequested);
         Interlocked.Increment(ref _dequeuedCount);
 
-        // Deserialize the message body directly (no envelope wrapper for backward compatibility)
-        var data = _serializer.Deserialize<T>(message.Body.ToArray());
-        var entry = new AzureStorageQueueEntry<T>(message, data, this);
+        T data;
+        string correlationId = null;
+        IDictionary<string, string> properties = null;
+
+        if (_options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default)
+        {
+            // Unwrap envelope to extract metadata
+            var envelope = _serializer.Deserialize<QueueMessageEnvelope<T>>(message.Body.ToArray());
+            data = envelope.Data;
+            correlationId = envelope.CorrelationId;
+            properties = envelope.Properties;
+        }
+        else
+        {
+            // Legacy mode: deserialize data directly (no envelope)
+            data = _serializer.Deserialize<T>(message.Body.ToArray());
+        }
+
+        var entry = new AzureStorageQueueEntry<T>(message, correlationId, properties, data, this);
 
         await OnDequeuedAsync(entry).AnyContext();
         _logger.LogTrace("Dequeued message: {QueueEntryId}", message.MessageId);
@@ -401,4 +433,26 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
         return azureQueueEntry;
     }
+}
+
+/// <summary>
+/// Envelope for wrapping queue data with metadata (correlation id, properties).
+/// Azure Storage Queue only supports a message body, so we serialize this entire envelope.
+/// </summary>
+internal record QueueMessageEnvelope<T> where T : class
+{
+    /// <summary>
+    /// Correlation ID for distributed tracing
+    /// </summary>
+    public string CorrelationId { get; init; }
+
+    /// <summary>
+    /// Custom properties/metadata
+    /// </summary>
+    public IDictionary<string, string> Properties { get; init; }
+
+    /// <summary>
+    /// The actual message payload
+    /// </summary>
+    public T Data { get; init; }
 }

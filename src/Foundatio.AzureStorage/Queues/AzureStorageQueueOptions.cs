@@ -3,6 +3,25 @@ using Azure.Core;
 
 namespace Foundatio.Queues;
 
+/// <summary>
+/// Compatibility mode for Azure Storage Queue message format.
+/// </summary>
+public enum AzureStorageQueueCompatibilityMode
+{
+    /// <summary>
+    /// Default mode: Uses message envelope for full metadata support.
+    /// Supports CorrelationId and Properties. New installations should use this mode.
+    /// </summary>
+    Default = 0,
+
+    /// <summary>
+    /// Legacy mode: Raw message body with Base64 encoding for v11 SDK compatibility.
+    /// Use this for backward compatibility with existing queues that have messages
+    /// written with the v11 Microsoft.Azure.Storage.Queue SDK.
+    /// </summary>
+    Legacy = 1
+}
+
 public class AzureStorageQueueOptions<T> : SharedQueueOptions<T> where T : class
 {
     public string ConnectionString { get; set; }
@@ -20,28 +39,22 @@ public class AzureStorageQueueOptions<T> : SharedQueueOptions<T> where T : class
         TimeSpan.FromSeconds(Math.Pow(2, attempt)) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 100));
 
     /// <summary>
-    /// When true, messages are Base64-encoded for backward compatibility with the legacy
-    /// Microsoft.Azure.Storage.Queue SDK (v11). The v11 SDK encoded all messages as Base64
-    /// by default, while the v12 Azure.Storage.Queues SDK does not.
+    /// Controls message format compatibility.
+    /// Default mode uses an envelope wrapper that supports CorrelationId and Properties.
+    /// Legacy mode is provided for backward compatibility with existing queues that have messages
+    /// written with the v11 Microsoft.Azure.Storage.Queue SDK (uses Base64 encoding and raw payload).
     ///
-    /// <para><b>Default:</b> false (v12 behavior - no encoding)</para>
+    /// <para><b>Default:</b> AzureStorageQueueCompatibilityMode.Default (envelope with metadata)</para>
     ///
-    /// <para><b>When to enable:</b> Only enable this if you have existing messages in your
-    /// queue that were written using the v11 SDK and need to be read during migration.</para>
-    ///
-    /// <para><b>Migration path:</b></para>
+    /// <para><b>Migration from v11 SDK:</b></para>
     /// <list type="number">
-    ///   <item><description>Enable UseBase64Encoding=true to read existing v11 messages</description></item>
+    ///   <item><description>Set CompatibilityMode = Legacy to read existing v11 messages</description></item>
     ///   <item><description>Process all existing messages from the queue</description></item>
-    ///   <item><description>Once queue is empty, disable UseBase64Encoding (set to false)</description></item>
-    ///   <item><description>All new messages will use raw encoding (v12 default)</description></item>
+    ///   <item><description>Once queue is empty, switch to CompatibilityMode = Default</description></item>
+    ///   <item><description>All new messages will use envelope format with metadata support</description></item>
     /// </list>
-    ///
-    /// <para><b>Deprecation notice:</b> This option exists solely for migration purposes
-    /// and may be removed in a future major version. Plan to migrate away from Base64
-    /// encoding as soon as practical.</para>
     /// </summary>
-    public bool UseBase64Encoding { get; set; }
+    public AzureStorageQueueCompatibilityMode CompatibilityMode { get; set; } = AzureStorageQueueCompatibilityMode.Default;
 
     /// <summary>
     /// Optional action to configure Azure SDK retry options.
@@ -89,12 +102,12 @@ public class AzureStorageQueueOptionsBuilder<T> : SharedQueueOptionsBuilder<T, A
     }
 
     /// <summary>
-    /// Enables Base64 message encoding for backward compatibility with the legacy v11 SDK.
-    /// See <see cref="AzureStorageQueueOptions{T}.UseBase64Encoding"/> for migration guidance.
+    /// Sets the message format compatibility mode.
+    /// See <see cref="AzureStorageQueueOptions{T}.CompatibilityMode"/> for migration guidance.
     /// </summary>
-    public AzureStorageQueueOptionsBuilder<T> UseBase64Encoding(bool useBase64Encoding = true)
+    public AzureStorageQueueOptionsBuilder<T> CompatibilityMode(AzureStorageQueueCompatibilityMode compatibilityMode)
     {
-        Target.UseBase64Encoding = useBase64Encoding;
+        Target.CompatibilityMode = compatibilityMode;
         return this;
     }
 
