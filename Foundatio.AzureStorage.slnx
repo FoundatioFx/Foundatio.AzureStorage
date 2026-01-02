@@ -5,9 +5,14 @@
     <File Path="docker-compose.yml" />
     <File Path="README.md" />
     <File Path="tests/Directory.Build.props" />
+    <File Path="samples/Directory.Build.props" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Foundatio.AzureStorage.Tests/Foundatio.AzureStorage.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Samples/">
+    <Project Path="samples/Foundatio.AzureStorage.Enqueue/Foundatio.AzureStorage.Enqueue.csproj" />
+    <Project Path="samples/Foundatio.AzureStorage.Dequeue/Foundatio.AzureStorage.Dequeue.csproj" />
   </Folder>
   <Project Path="src/Foundatio.AzureStorage/Foundatio.AzureStorage.csproj" />
 </Solution>
