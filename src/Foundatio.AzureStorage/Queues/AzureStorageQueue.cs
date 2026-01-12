@@ -113,6 +113,8 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         _logger.LogTrace("Checking for message: IsCancellationRequested={IsCancellationRequested} VisibilityTimeout={VisibilityTimeout}", linkedCancellationToken.IsCancellationRequested, _options.WorkItemTimeout);
 
         // Try to receive a message immediately
+        // Note: We use CancellationToken.None here because Azure SDK throws TaskCanceledException when the token
+        // is canceled, but we want to return null gracefully. Cancellation is checked before/after the call.
         var response = await _queueClient.Value.ReceiveMessageAsync(_options.WorkItemTimeout, CancellationToken.None).AnyContext();
         var message = response?.Value;
 
@@ -148,6 +150,9 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 {
                     // Ignore cancellation during delay
                 }
+
+                if (linkedCancellationToken.IsCancellationRequested)
+                    break;
 
                 response = await _queueClient.Value.ReceiveMessageAsync(_options.WorkItemTimeout, CancellationToken.None).AnyContext();
                 message = response?.Value;
@@ -225,7 +230,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 azureQueueEntry.UnderlyingMessage.MessageId,
                 azureQueueEntry.PopReceipt).AnyContext();
         }
-        catch (RequestFailedException ex) when (ex.Status == 404 || ex.ErrorCode == QueueErrorCode.MessageNotFound.ToString() || ex.ErrorCode == QueueErrorCode.PopReceiptMismatch.ToString())
+        catch (RequestFailedException ex) when (ex.Status == 404 || ex.ErrorCode == QueueErrorCode.MessageNotFound || ex.ErrorCode == QueueErrorCode.PopReceiptMismatch)
         {
             // Message was already deleted or the pop receipt expired (visibility timeout)
             // This means the item was auto-abandoned by Azure
@@ -251,7 +256,24 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             _logger.LogDebug("Moving message {QueueEntryId} to deadletter after {Attempts} attempts", entry.Id, azureQueueEntry.Attempts);
 
             // Send to deadletter queue first, then delete from main queue (sequential for data integrity)
-            var messageBody = new BinaryData(_serializer.SerializeToBytes(entry.Value));
+            byte[] deadletterBytes;
+            if (_options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default)
+            {
+                // Preserve envelope with metadata for Default mode
+                var envelope = new QueueMessageEnvelope<T>
+                {
+                    CorrelationId = entry.CorrelationId,
+                    Properties = entry.Properties,
+                    Data = entry.Value
+                };
+                deadletterBytes = _serializer.SerializeToBytes(envelope);
+            }
+            else
+            {
+                deadletterBytes = _serializer.SerializeToBytes(entry.Value);
+            }
+
+            var messageBody = new BinaryData(deadletterBytes);
             await _deadletterQueueClient.Value.SendMessageAsync(messageBody).AnyContext();
             await _queueClient.Value.DeleteMessageAsync(
                 azureQueueEntry.UnderlyingMessage.MessageId,

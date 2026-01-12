@@ -42,7 +42,7 @@ var propertiesOption = new Option<string[]>("--property")
 var modeOption = new Option<AzureStorageQueueCompatibilityMode>("--mode")
 {
     Description = "Compatibility mode (Default or Legacy)",
-    DefaultValueFactory = _ => AzureStorageQueueCompatibilityMode.Legacy
+    DefaultValueFactory = _ => AzureStorageQueueCompatibilityMode.Default
 };
 
 var countOption = new Option<int>("--count")

@@ -42,6 +42,8 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         var response = _container.CreateIfNotExists();
         if (response != null)
             _logger.LogDebug("Created {Container}", _container.Name);
+        else
+            _logger.LogDebug("{Container} already exists", _container.Name);
     }
 
     public AzureFileStorage(Builder<AzureFileStorageOptionsBuilder, AzureFileStorageOptions> config)
