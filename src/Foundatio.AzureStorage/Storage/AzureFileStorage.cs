@@ -319,7 +319,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         _logger.LogTrace("Getting file list: Prefix={Prefix} Pattern={Pattern} Limit={Limit}", criteria.Prefix, criteria.Pattern, totalLimit);
 
         var blobs = new List<FileSpec>();
-        await foreach (var blobItem in _container.GetBlobsAsync(prefix: criteria.Prefix, cancellationToken: cancellationToken))
+        await foreach (var blobItem in _container.GetBlobsAsync(new GetBlobsOptions { Prefix = criteria.Prefix }, cancellationToken: cancellationToken))
         {
             // TODO: Verify if it's possible to create empty folders in storage. If so, don't return them.
             if (criteria.Pattern != null && !criteria.Pattern.IsMatch(blobItem.Name))
@@ -329,7 +329,6 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
             }
 
             blobs.Add(ToFileInfo(blobItem));
-
             if (blobs.Count >= totalLimit)
                 break;
         }
