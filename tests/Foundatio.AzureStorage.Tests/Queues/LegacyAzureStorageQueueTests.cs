@@ -8,11 +8,11 @@ using Xunit;
 
 namespace Foundatio.Azure.Tests.Queue;
 
-public class AzureStorageQueueTests : QueueTestBase
+public class LegacyAzureStorageQueueTests : QueueTestBase
 {
-    private readonly string _queueName = "foundatio-" + Guid.NewGuid().ToString("N").Substring(10);
+    private readonly string _queueName = "foundatio-legacy-" + Guid.NewGuid().ToString("N").Substring(10);
 
-    public AzureStorageQueueTests(ITestOutputHelper output) : base(output)
+    public LegacyAzureStorageQueueTests(ITestOutputHelper output) : base(output)
     {
     }
 
@@ -26,6 +26,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return new AzureStorageQueue<SimpleWorkItem>(o => o
             .ConnectionString(connectionString)
             .Name(_queueName)
+            .CompatibilityMode(AzureStorageQueueCompatibilityMode.Legacy)
             .Retries(retries)
             .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
             .DequeueInterval(TimeSpan.FromSeconds(1))
@@ -53,7 +54,7 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanQueueAndDequeueWorkItemWithDelayAsync();
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy mode does not support CorrelationId or Properties - only message body is persisted")]
     public override Task CanUseQueueOptionsAsync()
     {
         return base.CanUseQueueOptionsAsync();
