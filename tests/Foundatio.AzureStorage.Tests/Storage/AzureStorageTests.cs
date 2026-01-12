@@ -172,6 +172,7 @@ public class AzureStorageTests : FileStorageTestsBase
             Assert.NotNull(container);
 
             var blobClient = container.GetBlobClient("EmptyFolder/");
+            Assert.NotNull(blobClient);
             using var ms = new MemoryStream();
             await blobClient.UploadAsync(ms, TestCancellationToken);
 

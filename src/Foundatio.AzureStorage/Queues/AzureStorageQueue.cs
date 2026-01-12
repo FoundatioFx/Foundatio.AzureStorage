@@ -116,7 +116,6 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         var response = await _queueClient.Value.ReceiveMessageAsync(_options.WorkItemTimeout, CancellationToken.None).AnyContext();
         var message = response?.Value;
 
-        // If we got a message, process it immediately
         // If no message and cancellation requested, return null immediately (don't wait/poll)
         if (message == null && linkedCancellationToken.IsCancellationRequested)
         {
@@ -247,7 +246,6 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             throw new InvalidOperationException("Queue entry has already been completed or abandoned.");
 
         var azureQueueEntry = ToAzureEntryWithCheck(entry);
-
         if (azureQueueEntry.Attempts > _options.Retries)
         {
             _logger.LogDebug("Moving message {QueueEntryId} to deadletter after {Attempts} attempts", entry.Id, azureQueueEntry.Attempts);
