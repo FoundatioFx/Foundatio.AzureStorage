@@ -168,7 +168,8 @@ public class AzureStorageTests : FileStorageTestsBase
             Assert.False(result.HasMore);
             Assert.Empty(result.Files);
 
-            var container = storage is AzureFileStorage azureFileStorage ? azureFileStorage.Container : null;
+            var azureFileStorage = Assert.IsType<AzureFileStorage>(storage);
+            var container = azureFileStorage.Container;
             Assert.NotNull(container);
 
             var blobClient = container.GetBlobClient("EmptyFolder/");
