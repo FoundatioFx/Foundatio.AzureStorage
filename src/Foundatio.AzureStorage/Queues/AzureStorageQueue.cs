@@ -27,8 +27,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
     public AzureStorageQueue(AzureStorageQueueOptions<T> options) : base(options)
     {
-        if (String.IsNullOrEmpty(options.ConnectionString))
-            throw new ArgumentException("ConnectionString is required.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ConnectionString, nameof(options.ConnectionString));
 
         var clientOptions = new QueueClientOptions();
 #pragma warning disable CS0618 // Legacy mode is still supported internally for backward compatibility

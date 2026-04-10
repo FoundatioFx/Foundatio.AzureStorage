@@ -27,6 +27,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     public AzureFileStorage(AzureFileStorageOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ConnectionString, nameof(options.ConnectionString));
 
         _timeProvider = options.TimeProvider ?? TimeProvider.System;
         _serializer = options.Serializer ?? DefaultSerializer.Instance;

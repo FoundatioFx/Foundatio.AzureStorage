@@ -37,7 +37,7 @@ public class AzureFileStorageOptionsBuilder : SharedOptionsBuilder<AzureFileStor
 
     public AzureFileStorageOptionsBuilder ContainerName(string containerName)
     {
-        ArgumentException.ThrowIfNullOrEmpty(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
 
         Target.ContainerName = containerName;
         return this;
