@@ -179,6 +179,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         T? data;
         string? correlationId = null;
         IDictionary<string, string>? properties = null;
+        Exception? deserializeException = null;
 
         try
         {
@@ -186,6 +187,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             {
                 try
                 {
+                    // Unwrap envelope to extract metadata
                     var envelope = _serializer.Deserialize<QueueMessageEnvelope<T>>(message.Body.ToArray());
                     if (envelope is not null)
                     {
@@ -200,23 +202,28 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 }
                 catch (Exception ex)
                 {
+                    // Fallback: try legacy format (raw T) for messages written before the envelope format.
+                    // If this also fails, let the exception propagate to the outer catch which will dead-letter it.
                     _logger.LogWarning(ex, "Failed to deserialize message {MessageId} as envelope format, attempting legacy format fallback", message.MessageId);
                     data = _serializer.Deserialize<T>(message.Body.ToArray());
                 }
             }
             else
             {
+                // Legacy mode: deserialize data directly (no envelope)
                 data = _serializer.Deserialize<T>(message.Body.ToArray());
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error deserializing message {MessageId} (attempt {DequeueCount}), abandoning for retry", message.MessageId, message.DequeueCount);
             data = null;
+            deserializeException = ex;
         }
 
         if (data is null)
         {
+            _logger.LogWarning(deserializeException, "Error deserializing message {MessageId} (attempt {DequeueCount}), abandoning for retry", message.MessageId, message.DequeueCount);
+
             var poisonEntry = new AzureStorageQueueEntry<T>(message, null, null, default!, this);
             await AbandonAsync(poisonEntry).AnyContext();
             return null;

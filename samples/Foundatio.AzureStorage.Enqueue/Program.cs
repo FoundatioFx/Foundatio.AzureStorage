@@ -68,10 +68,10 @@ rootCommand.SetAction(async parseResult =>
                           Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ??
                           EmulatorConnectionString;
 
-    var queueName = parseResult.GetValue(queueOption);
-    var message = parseResult.GetValue(messageOption);
+    var queueName = parseResult.GetValue(queueOption) ?? "sample-queue";
+    var message = parseResult.GetValue(messageOption) ?? "Hello World";
     var correlationId = parseResult.GetValue(correlationIdOption);
-    var properties = parseResult.GetValue(propertiesOption);
+    var properties = parseResult.GetValue(propertiesOption) ?? Array.Empty<string>();
     var mode = parseResult.GetValue(modeOption);
     var count = parseResult.GetValue(countOption);
 
@@ -79,7 +79,7 @@ rootCommand.SetAction(async parseResult =>
     Console.WriteLine($"Mode: {mode}");
     Console.WriteLine();
 
-    await EnqueueMessages(connectionString, queueName!, message!, correlationId, properties!, mode, count);
+    await EnqueueMessages(connectionString, queueName, message, correlationId, properties, mode, count);
     return 0;
 });
 

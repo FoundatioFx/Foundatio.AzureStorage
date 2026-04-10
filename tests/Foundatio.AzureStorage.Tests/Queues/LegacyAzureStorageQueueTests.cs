@@ -24,27 +24,19 @@ public class LegacyAzureStorageQueueTests : QueueTestBase
             return null;
 
         _logger.LogDebug("Queue Id: {Name}", _queueName);
-        return new AzureStorageQueue<SimpleWorkItem>(o =>
-        {
-            var builder = o
-                .ConnectionString(connectionString)
-                .Name(_queueName)
+        return new AzureStorageQueue<SimpleWorkItem>(o => o
+            .ConnectionString(connectionString)
+            .Name(_queueName)
 #pragma warning disable CS0618 // Testing legacy mode intentionally
-                .CompatibilityMode(AzureStorageQueueCompatibilityMode.Legacy)
+            .CompatibilityMode(AzureStorageQueueCompatibilityMode.Legacy)
 #pragma warning restore CS0618
-                .Retries(retries)
-                .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
-                .DequeueInterval(TimeSpan.FromSeconds(1))
-                .MetricsPollingInterval(TimeSpan.Zero)
-                .LoggerFactory(Log);
-
-            if (timeProvider is not null)
-                builder.TimeProvider(timeProvider);
-            if (serializer is not null)
-                builder.Serializer(serializer);
-
-            return builder;
-        });
+            .Retries(retries)
+            .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
+            .DequeueInterval(TimeSpan.FromSeconds(1))
+            .MetricsPollingInterval(TimeSpan.Zero)
+            .TimeProvider(timeProvider)
+            .Serializer(serializer)
+            .LoggerFactory(Log));
     }
 
     protected override Task CleanupQueueAsync(IQueue<SimpleWorkItem> queue)

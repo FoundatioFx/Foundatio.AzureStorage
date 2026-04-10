@@ -66,7 +66,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        string normalizedPath = NormalizePath(path);
+        string normalizedPath = NormalizePath(path)!;
         _logger.LogTrace("Getting file stream for {Path}", normalizedPath);
 
         var blobClient = _container.GetBlobClient(normalizedPath);
@@ -96,7 +96,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        string normalizedPath = NormalizePath(path);
+        string normalizedPath = NormalizePath(path)!;
         _logger.LogTrace("Getting file info for {Path}", normalizedPath);
 
         var blobClient = _container.GetBlobClient(normalizedPath);
@@ -126,7 +126,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        string normalizedPath = NormalizePath(path);
+        string normalizedPath = NormalizePath(path)!;
         _logger.LogTrace("Checking if {Path} exists", normalizedPath);
 
         var blobClient = _container.GetBlobClient(normalizedPath);
@@ -139,7 +139,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(stream);
 
-        string normalizedPath = NormalizePath(path);
+        string normalizedPath = NormalizePath(path)!;
         _logger.LogTrace("Saving {Path}", normalizedPath);
 
         try
@@ -165,8 +165,8 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentException.ThrowIfNullOrEmpty(newPath);
 
-        string normalizedPath = NormalizePath(path);
-        string normalizedNewPath = NormalizePath(newPath);
+        string normalizedPath = NormalizePath(path)!;
+        string normalizedNewPath = NormalizePath(newPath)!;
         _logger.LogDebug("Renaming {Path} to {NewPath}", normalizedPath, normalizedNewPath);
 
         try
@@ -200,8 +200,8 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentException.ThrowIfNullOrEmpty(targetPath);
 
-        string normalizedPath = NormalizePath(path);
-        string normalizedTargetPath = NormalizePath(targetPath);
+        string normalizedPath = NormalizePath(path)!;
+        string normalizedTargetPath = NormalizePath(targetPath)!;
         _logger.LogDebug("Copying {Path} to {TargetPath}", normalizedPath, normalizedTargetPath);
 
         try
@@ -238,7 +238,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        string normalizedPath = NormalizePath(path);
+        string normalizedPath = NormalizePath(path)!;
         _logger.LogTrace("Deleting {Path}", normalizedPath);
 
         try
@@ -367,14 +367,14 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         };
     }
 
-    private static string NormalizePath(string path)
+    private static string? NormalizePath(string? path)
     {
-        return path.Replace('\\', '/');
+        return path?.Replace('\\', '/');
     }
 
     private record SearchCriteria
     {
-        public string Prefix { get; set; } = String.Empty;
+        public required string Prefix { get; set; }
         public Regex? Pattern { get; set; }
     }
 
@@ -383,7 +383,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
         if (String.IsNullOrEmpty(searchPattern))
             return new SearchCriteria { Prefix = String.Empty };
 
-        string normalizedSearchPattern = NormalizePath(searchPattern);
+        string normalizedSearchPattern = NormalizePath(searchPattern)!;
         int wildcardPos = normalizedSearchPattern.IndexOf('*');
         bool hasWildcard = wildcardPos >= 0;
 

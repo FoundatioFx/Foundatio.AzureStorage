@@ -48,7 +48,7 @@ rootCommand.SetAction(async parseResult =>
                           Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ??
                           EmulatorConnectionString;
 
-    var queueName = parseResult.GetValue(queueOption);
+    var queueName = parseResult.GetValue(queueOption) ?? "sample-queue";
     var mode = parseResult.GetValue(modeOption);
     var count = parseResult.GetValue(countOption);
 
@@ -60,7 +60,7 @@ rootCommand.SetAction(async parseResult =>
     Console.WriteLine("Press Ctrl+C to stop...");
     Console.WriteLine();
 
-    await DequeueMessages(connectionString, queueName!, mode, count);
+    await DequeueMessages(connectionString, queueName, mode, count);
     return 0;
 });
 

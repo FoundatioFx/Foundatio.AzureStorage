@@ -27,24 +27,16 @@ public class AzureStorageQueueTests : QueueTestBase
             return null;
 
         _logger.LogDebug("Queue Id: {Name}", _queueName);
-        return new AzureStorageQueue<SimpleWorkItem>(o =>
-        {
-            var builder = o
-                .ConnectionString(connectionString)
-                .Name(_queueName)
-                .Retries(retries)
-                .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
-                .DequeueInterval(TimeSpan.FromSeconds(1))
-                .MetricsPollingInterval(TimeSpan.Zero)
-                .LoggerFactory(Log);
-
-            if (timeProvider is not null)
-                builder.TimeProvider(timeProvider);
-            if (serializer is not null)
-                builder.Serializer(serializer);
-
-            return builder;
-        });
+        return new AzureStorageQueue<SimpleWorkItem>(o => o
+            .ConnectionString(connectionString)
+            .Name(_queueName)
+            .Retries(retries)
+            .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
+            .DequeueInterval(TimeSpan.FromSeconds(1))
+            .MetricsPollingInterval(TimeSpan.Zero)
+            .TimeProvider(timeProvider)
+            .Serializer(serializer)
+            .LoggerFactory(Log));
     }
 
     protected override Task CleanupQueueAsync(IQueue<SimpleWorkItem> queue)
@@ -244,7 +236,7 @@ public class AzureStorageQueueTests : QueueTestBase
     public async Task DequeueAsync_WithLegacyFormatMessage_DeserializesWithFallbackAsync()
     {
         // Arrange - Inject a raw (non-envelope) message simulating legacy format
-        var connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
         if (String.IsNullOrEmpty(connectionString))
             return;
 
@@ -305,7 +297,7 @@ public class AzureStorageQueueTests : QueueTestBase
     [Fact]
     public async Task DequeueAsync_WithCorruptMessage_MovesToDeadletterAsync()
     {
-        var connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
         if (String.IsNullOrEmpty(connectionString))
             return;
 
