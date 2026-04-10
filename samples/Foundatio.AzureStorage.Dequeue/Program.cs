@@ -120,7 +120,7 @@ static async Task DequeueMessages(string connectionString, string queueName, Azu
                 processed++;
 
                 logger.LogInformation("Dequeued message {MessageId}: '{Message}' from '{Source}' at {Timestamp}",
-                    entry.Id, entry.Value.Message, entry.Value.Source, entry.Value.Timestamp);
+                    entry.Id, entry.Value?.Message, entry.Value?.Source, entry.Value?.Timestamp);
 
                 logger.LogInformation("  CorrelationId: '{CorrelationId}'", entry.CorrelationId ?? "<none>");
 
