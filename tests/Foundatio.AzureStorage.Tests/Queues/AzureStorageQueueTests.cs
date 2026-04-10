@@ -20,11 +20,11 @@ public class AzureStorageQueueTests : QueueTestBase
     {
     }
 
-    protected override IQueue<SimpleWorkItem> GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[]? retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider? timeProvider = null, ISerializer? serializer = null)
+    protected override IQueue<SimpleWorkItem>? GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[]? retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider? timeProvider = null, ISerializer? serializer = null)
     {
         string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
         if (String.IsNullOrEmpty(connectionString))
-            return null!;
+            return null;
 
         _logger.LogDebug("Queue Id: {Name}", _queueName);
         return new AzureStorageQueue<SimpleWorkItem>(o =>

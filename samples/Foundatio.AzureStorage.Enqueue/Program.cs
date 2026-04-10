@@ -132,7 +132,7 @@ static async Task EnqueueMessages(string connectionString, string queueName, str
 
         logger.LogInformation("Enqueued message {MessageId}: '{Message}' with CorrelationId: '{CorrelationId}' Properties: [{Properties}]",
             messageId, sampleMessage.Message, correlationId ?? "<none>",
-            string.Join(", ", queueProperties.Select(p => $"{p.Key}={p.Value}")));
+            String.Join(", ", queueProperties.Select(p => $"{p.Key}={p.Value}")));
     }
 
     logger.LogInformation("Successfully enqueued {Count} message(s)", count);

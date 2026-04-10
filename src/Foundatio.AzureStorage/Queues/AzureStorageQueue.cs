@@ -515,5 +515,5 @@ internal record QueueMessageEnvelope<T> where T : class
     /// <summary>
     /// The actual message payload
     /// </summary>
-    public T Data { get; init; } = null!;
+    public required T Data { get; init; }
 }

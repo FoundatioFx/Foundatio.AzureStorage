@@ -15,11 +15,11 @@ public class AzureStorageTests : FileStorageTestsBase
     {
     }
 
-    protected override IFileStorage GetStorage()
+    protected override IFileStorage? GetStorage()
     {
         string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
         if (String.IsNullOrEmpty(connectionString))
-            return null!;
+            return null;
 
         return new AzureFileStorage(o => o.ConnectionString(connectionString).LoggerFactory(Log));
     }

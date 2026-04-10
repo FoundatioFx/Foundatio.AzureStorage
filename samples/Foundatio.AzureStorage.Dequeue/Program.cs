@@ -127,7 +127,7 @@ static async Task DequeueMessages(string connectionString, string queueName, Azu
                 if (entry.Properties != null && entry.Properties.Count > 0)
                 {
                     logger.LogInformation("  Properties: [{Properties}]",
-                        string.Join(", ", entry.Properties.Select(p => $"{p.Key}={p.Value}")));
+                        String.Join(", ", entry.Properties.Select(p => $"{p.Key}={p.Value}")));
                 }
                 else
                 {

@@ -373,7 +373,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
 
     private record SearchCriteria
     {
-        public string Prefix { get; set; } = null!;
+        public string Prefix { get; set; } = String.Empty;
         public Regex? Pattern { get; set; }
     }
 

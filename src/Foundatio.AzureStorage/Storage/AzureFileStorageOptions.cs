@@ -5,7 +5,7 @@ namespace Foundatio.Storage;
 
 public class AzureFileStorageOptions : SharedOptions
 {
-    public string ConnectionString { get; set; } = null!;
+    public string? ConnectionString { get; set; }
     public string ContainerName { get; set; } = "storage";
 
     /// <summary>

@@ -4,7 +4,7 @@ namespace Foundatio.AzureStorage.Samples;
 
 public record SampleMessage
 {
-    public string Message { get; init; } = string.Empty;
+    public string Message { get; init; } = String.Empty;
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-    public string Source { get; init; } = string.Empty;
+    public string Source { get; init; } = String.Empty;
 }

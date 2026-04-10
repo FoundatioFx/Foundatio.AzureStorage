@@ -25,7 +25,7 @@ public enum AzureStorageQueueCompatibilityMode
 
 public class AzureStorageQueueOptions<T> : SharedQueueOptions<T> where T : class
 {
-    public string ConnectionString { get; set; } = null!;
+    public string? ConnectionString { get; set; }
 
     /// <summary>
     /// The interval to wait between polling for new messages when the queue is empty.
