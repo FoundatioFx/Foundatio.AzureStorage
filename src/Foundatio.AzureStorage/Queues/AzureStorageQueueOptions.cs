@@ -78,7 +78,7 @@ public class AzureStorageQueueOptionsBuilder<T> : SharedQueueOptionsBuilder<T, A
 {
     public AzureStorageQueueOptionsBuilder<T> ConnectionString(string connectionString)
     {
-        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         Target.ConnectionString = connectionString;
         return this;

@@ -29,7 +29,7 @@ public class AzureFileStorageOptionsBuilder : SharedOptionsBuilder<AzureFileStor
 {
     public AzureFileStorageOptionsBuilder ConnectionString(string connectionString)
     {
-        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         Target.ConnectionString = connectionString;
         return this;
