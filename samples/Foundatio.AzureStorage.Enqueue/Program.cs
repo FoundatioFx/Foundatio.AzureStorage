@@ -79,14 +79,14 @@ rootCommand.SetAction(async parseResult =>
     Console.WriteLine($"Mode: {mode}");
     Console.WriteLine();
 
-    await EnqueueMessages(connectionString, queueName, message, correlationId, properties, mode, count);
+    await EnqueueMessages(connectionString, queueName!, message!, correlationId, properties!, mode, count);
     return 0;
 });
 
 // Parse and invoke
 return await rootCommand.Parse(args).InvokeAsync();
 
-static async Task EnqueueMessages(string connectionString, string queueName, string message, string correlationId, string[] properties, AzureStorageQueueCompatibilityMode mode, int count)
+static async Task EnqueueMessages(string connectionString, string queueName, string message, string? correlationId, string[] properties, AzureStorageQueueCompatibilityMode mode, int count)
 {
     using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
     var logger = loggerFactory.CreateLogger("Enqueue");
@@ -122,9 +122,11 @@ static async Task EnqueueMessages(string connectionString, string queueName, str
 
         var entryOptions = new QueueEntryOptions
         {
-            CorrelationId = correlationId,
-            Properties = queueProperties.Count > 0 ? queueProperties : null
+            CorrelationId = correlationId
         };
+
+        if (queueProperties.Count > 0)
+            entryOptions.Properties = queueProperties;
 
         var messageId = await queue.EnqueueAsync(sampleMessage, entryOptions);
 

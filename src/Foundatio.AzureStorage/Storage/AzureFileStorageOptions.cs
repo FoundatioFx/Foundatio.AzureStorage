@@ -5,7 +5,7 @@ namespace Foundatio.Storage;
 
 public class AzureFileStorageOptions : SharedOptions
 {
-    public string ConnectionString { get; set; }
+    public string ConnectionString { get; set; } = null!;
     public string ContainerName { get; set; } = "storage";
 
     /// <summary>
@@ -22,7 +22,7 @@ public class AzureFileStorageOptions : SharedOptions
     /// };
     /// </code>
     /// </example>
-    public Action<RetryOptions> ConfigureRetry { get; set; }
+    public Action<RetryOptions>? ConfigureRetry { get; set; }
 }
 
 public class AzureFileStorageOptionsBuilder : SharedOptionsBuilder<AzureFileStorageOptions, AzureFileStorageOptionsBuilder>

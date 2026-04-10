@@ -17,26 +17,34 @@ public class LegacyAzureStorageQueueTests : QueueTestBase
     {
     }
 
-    protected override IQueue<SimpleWorkItem> GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[] retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider timeProvider = null, ISerializer serializer = null)
+    protected override IQueue<SimpleWorkItem> GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[]? retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider? timeProvider = null, ISerializer? serializer = null)
     {
-        string connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
         if (String.IsNullOrEmpty(connectionString))
-            return null;
+            return null!;
 
         _logger.LogDebug("Queue Id: {Name}", _queueName);
-        return new AzureStorageQueue<SimpleWorkItem>(o => o
-            .ConnectionString(connectionString)
-            .Name(_queueName)
+        return new AzureStorageQueue<SimpleWorkItem>(o =>
+        {
+            var builder = o
+                .ConnectionString(connectionString)
+                .Name(_queueName)
 #pragma warning disable CS0618 // Testing legacy mode intentionally
-            .CompatibilityMode(AzureStorageQueueCompatibilityMode.Legacy)
+                .CompatibilityMode(AzureStorageQueueCompatibilityMode.Legacy)
 #pragma warning restore CS0618
-            .Retries(retries)
-            .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
-            .DequeueInterval(TimeSpan.FromSeconds(1))
-            .MetricsPollingInterval(TimeSpan.Zero)
-            .TimeProvider(timeProvider)
-            .Serializer(serializer)
-            .LoggerFactory(Log));
+                .Retries(retries)
+                .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
+                .DequeueInterval(TimeSpan.FromSeconds(1))
+                .MetricsPollingInterval(TimeSpan.Zero)
+                .LoggerFactory(Log);
+
+            if (timeProvider is not null)
+                builder.TimeProvider(timeProvider);
+            if (serializer is not null)
+                builder.Serializer(serializer);
+
+            return builder;
+        });
     }
 
     protected override Task CleanupQueueAsync(IQueue<SimpleWorkItem> queue)

@@ -71,7 +71,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         }
     }
 
-    protected override async Task<string> EnqueueImplAsync(T data, QueueEntryOptions options)
+    protected override async Task<string?> EnqueueImplAsync(T data, QueueEntryOptions options)
     {
         if (!await OnEnqueuingAsync(data, options).AnyContext())
             return null;
@@ -110,7 +110,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         return response.Value.MessageId;
     }
 
-    protected override async Task<IQueueEntry<T>> DequeueImplAsync(CancellationToken linkedCancellationToken)
+    protected override async Task<IQueueEntry<T>?> DequeueImplAsync(CancellationToken linkedCancellationToken)
     {
         _logger.LogTrace("Checking for message: IsCancellationRequested={IsCancellationRequested} VisibilityTimeout={VisibilityTimeout}", linkedCancellationToken.IsCancellationRequested, _options.WorkItemTimeout);
 
@@ -177,9 +177,9 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             message.MessageId, insertedOn, nowUtc, queueTime.TotalMilliseconds, linkedCancellationToken.IsCancellationRequested);
         Interlocked.Increment(ref _dequeuedCount);
 
-        T data;
-        string correlationId = null;
-        IDictionary<string, string> properties = null;
+        T? data;
+        string? correlationId = null;
+        IDictionary<string, string>? properties = null;
 
         try
         {
@@ -187,31 +187,38 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             {
                 try
                 {
-                    // Unwrap envelope to extract metadata
                     var envelope = _serializer.Deserialize<QueueMessageEnvelope<T>>(message.Body.ToArray());
-                    data = envelope.Data;
-                    correlationId = envelope.CorrelationId;
-                    properties = envelope.Properties;
+                    if (envelope is not null)
+                    {
+                        data = envelope.Data;
+                        correlationId = envelope.CorrelationId;
+                        properties = envelope.Properties;
+                    }
+                    else
+                    {
+                        data = _serializer.Deserialize<T>(message.Body.ToArray());
+                    }
                 }
                 catch (Exception ex)
                 {
-                    // Fallback: try legacy format (raw T) for messages written before the envelope format.
-                    // If this also fails, let the exception propagate to the outer catch which will dead-letter it.
                     _logger.LogWarning(ex, "Failed to deserialize message {MessageId} as envelope format, attempting legacy format fallback", message.MessageId);
                     data = _serializer.Deserialize<T>(message.Body.ToArray());
                 }
             }
             else
             {
-                // Legacy mode: deserialize data directly (no envelope)
                 data = _serializer.Deserialize<T>(message.Body.ToArray());
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error deserializing message {MessageId} (attempt {DequeueCount}), abandoning for retry", message.MessageId, message.DequeueCount);
+            data = null;
+        }
 
-            var poisonEntry = new AzureStorageQueueEntry<T>(message, null, null, null, this);
+        if (data is null)
+        {
+            var poisonEntry = new AzureStorageQueueEntry<T>(message, null, null, default!, this);
             await AbandonAsync(poisonEntry).AnyContext();
             return null;
         }
@@ -419,7 +426,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             {
                 _logger.LogTrace("WorkerLoop Signaled {QueueName}", _options.Name);
 
-                IQueueEntry<T> queueEntry = null;
+                IQueueEntry<T>? queueEntry = null;
                 try
                 {
                     queueEntry = await DequeueImplAsync(linkedCancellationToken.Token).AnyContext();
@@ -498,15 +505,15 @@ internal record QueueMessageEnvelope<T> where T : class
     /// <summary>
     /// Correlation ID for distributed tracing
     /// </summary>
-    public string CorrelationId { get; init; }
+    public string? CorrelationId { get; init; }
 
     /// <summary>
     /// Custom properties/metadata
     /// </summary>
-    public IDictionary<string, string> Properties { get; init; }
+    public IDictionary<string, string>? Properties { get; init; }
 
     /// <summary>
     /// The actual message payload
     /// </summary>
-    public T Data { get; init; }
+    public T Data { get; init; } = null!;
 }

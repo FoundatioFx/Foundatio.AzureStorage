@@ -60,7 +60,7 @@ rootCommand.SetAction(async parseResult =>
     Console.WriteLine("Press Ctrl+C to stop...");
     Console.WriteLine();
 
-    await DequeueMessages(connectionString, queueName, mode, count);
+    await DequeueMessages(connectionString, queueName!, mode, count);
     return 0;
 });
 
