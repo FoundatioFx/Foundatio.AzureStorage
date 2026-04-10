@@ -27,7 +27,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
     public AzureStorageQueue(AzureStorageQueueOptions<T> options) : base(options)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ConnectionString, nameof(options.ConnectionString));
+        ArgumentException.ThrowIfNullOrWhiteSpace(options?.ConnectionString, nameof(options.ConnectionString));
 
         var clientOptions = new QueueClientOptions();
 #pragma warning disable CS0618 // Legacy mode is still supported internally for backward compatibility
@@ -224,7 +224,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         {
             _logger.LogWarning(deserializeException, "Error deserializing message {MessageId} (attempt {DequeueCount}), abandoning for retry", message.MessageId, message.DequeueCount);
 
-            var poisonEntry = new AzureStorageQueueEntry<T>(message, null, null, default!, this);
+            var poisonEntry = new AzureStorageQueueEntry<T>(message, null, null, null, this);
             await AbandonAsync(poisonEntry).AnyContext();
             return null;
         }

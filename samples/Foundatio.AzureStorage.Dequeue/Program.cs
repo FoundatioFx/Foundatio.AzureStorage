@@ -48,9 +48,21 @@ rootCommand.SetAction(async parseResult =>
                           Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ??
                           EmulatorConnectionString;
 
-    var queueName = parseResult.GetValue(queueOption) ?? "sample-queue";
+    var queueName = parseResult.GetValue(queueOption);
     var mode = parseResult.GetValue(modeOption);
     var count = parseResult.GetValue(countOption);
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.Error.WriteLine("Error: Connection string is required. Use --connection-string or set AZURE_STORAGE_CONNECTION_STRING.");
+        return 1;
+    }
+
+    if (string.IsNullOrWhiteSpace(queueName))
+    {
+        Console.Error.WriteLine("Error: Queue name is required. Use --queue.");
+        return 1;
+    }
 
     Console.WriteLine($"Using connection: {(connectionString == EmulatorConnectionString ? "Azure Storage Emulator" : "Custom connection string")}");
     Console.WriteLine($"Mode: {mode}");

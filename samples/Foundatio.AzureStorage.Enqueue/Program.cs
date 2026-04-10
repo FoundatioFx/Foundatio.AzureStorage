@@ -68,12 +68,30 @@ rootCommand.SetAction(async parseResult =>
                           Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ??
                           EmulatorConnectionString;
 
-    var queueName = parseResult.GetValue(queueOption) ?? "sample-queue";
-    var message = parseResult.GetValue(messageOption) ?? "Hello World";
+    var queueName = parseResult.GetValue(queueOption);
+    var message = parseResult.GetValue(messageOption);
     var correlationId = parseResult.GetValue(correlationIdOption);
-    var properties = parseResult.GetValue(propertiesOption) ?? Array.Empty<string>();
+    var properties = parseResult.GetValue(propertiesOption) ?? [];
     var mode = parseResult.GetValue(modeOption);
     var count = parseResult.GetValue(countOption);
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.Error.WriteLine("Error: Connection string is required. Use --connection-string or set AZURE_STORAGE_CONNECTION_STRING.");
+        return 1;
+    }
+
+    if (string.IsNullOrWhiteSpace(queueName))
+    {
+        Console.Error.WriteLine("Error: Queue name is required. Use --queue.");
+        return 1;
+    }
+
+    if (string.IsNullOrWhiteSpace(message))
+    {
+        Console.Error.WriteLine("Error: Message is required. Use --message.");
+        return 1;
+    }
 
     Console.WriteLine($"Using connection: {(connectionString == EmulatorConnectionString ? "Azure Storage Emulator" : "Custom connection string")}");
     Console.WriteLine($"Mode: {mode}");
@@ -100,15 +118,12 @@ static async Task EnqueueMessages(string connectionString, string queueName, str
         .LoggerFactory(loggerFactory));
 
     var queueProperties = new Dictionary<string, string>();
-    if (properties != null)
+    foreach (var prop in properties)
     {
-        foreach (var prop in properties)
+        var parts = prop.Split('=', 2);
+        if (parts.Length == 2)
         {
-            var parts = prop.Split('=', 2);
-            if (parts.Length == 2)
-            {
-                queueProperties[parts[0]] = parts[1];
-            }
+            queueProperties[parts[0]] = parts[1];
         }
     }
 

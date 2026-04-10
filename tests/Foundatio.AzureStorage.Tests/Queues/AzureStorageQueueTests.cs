@@ -272,7 +272,7 @@ public class AzureStorageQueueTests : QueueTestBase
 
         // Assert
         Assert.NotNull(entry);
-        Assert.NotNull(entry.Value);
+        Assert.NotNull(entry?.Value);
         Assert.Equal("legacy-item", entry.Value.Data);
         Assert.Equal(42, entry.Value.Id);
         Assert.Null(entry.CorrelationId);
