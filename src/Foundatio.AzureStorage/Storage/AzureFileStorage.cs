@@ -96,9 +96,7 @@ public class AzureFileStorage : IFileStorage, IHaveLogger, IHaveLoggerFactory, I
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        string? normalizedPath = NormalizePath(path);
-        if (normalizedPath is null)
-            return null;
+        string normalizedPath = NormalizePath(path)!;
 
         _logger.LogTrace("Getting file info for {Path}", normalizedPath);
 
