@@ -271,7 +271,6 @@ public class AzureStorageQueueTests : QueueTestBase
         var entry = await defaultQueue.DequeueAsync(dequeueCts.Token);
 
         // Assert
-        Assert.NotNull(entry);
         Assert.NotNull(entry?.Value);
         Assert.Equal("legacy-item", entry.Value.Data);
         Assert.Equal(42, entry.Value.Id);
