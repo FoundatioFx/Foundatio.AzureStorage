@@ -148,6 +148,64 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.DuplicateDetection_WithNullIdentifier_AcceptsAllItemsAsync();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EnqueueAsync_WithCompatibilityMode_EventMatchesDequeuedMetadataAsync(bool legacy)
+    {
+        // Arrange
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        Assert.False(String.IsNullOrEmpty(connectionString));
+#pragma warning disable CS0618 // Exercise the supported legacy wire format.
+        using var queue = new AzureStorageQueue<SimpleWorkItem>(new AzureStorageQueueOptions<SimpleWorkItem>
+        {
+            ConnectionString = connectionString,
+            Name = "foundatio-metadata-" + Guid.NewGuid().ToString("N"),
+            CompatibilityMode = legacy ? AzureStorageQueueCompatibilityMode.Legacy : AzureStorageQueueCompatibilityMode.Default,
+            MetricsPollingEnabled = false,
+            LoggerFactory = Log
+        });
+#pragma warning restore CS0618
+        IQueueEntry<SimpleWorkItem>? enqueued = null;
+        queue.Enqueued.AddHandler((_, args) =>
+        {
+            enqueued = args.Entry;
+            return Task.CompletedTask;
+        });
+        var options = new QueueEntryOptions { GroupId = "tenant", CorrelationId = "correlation" };
+        options.Properties.Add("custom", "value");
+
+        // Act
+        await queue.EnqueueAsync(new SimpleWorkItem { Data = "payload" }, options);
+        var dequeued = await queue.DequeueAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.NotNull(enqueued);
+        Assert.NotNull(dequeued);
+        Assert.Equal("payload", dequeued.Value.Data);
+        Assert.Equal(legacy ? null : "tenant", dequeued.GroupId);
+        Assert.Equal(legacy ? null : "correlation", dequeued.CorrelationId);
+        Assert.Equal(dequeued.GroupId, enqueued.GroupId);
+        Assert.Equal(dequeued.CorrelationId, enqueued.CorrelationId);
+        Assert.Equal(dequeued.Properties.Count, enqueued.Properties.Count);
+        if (legacy)
+            Assert.Empty(dequeued.Properties);
+        else
+        {
+            Assert.Equal("value", dequeued.Properties["custom"]);
+            Assert.Equal("value", enqueued.Properties["custom"]);
+        }
+        Assert.Equal("tenant", options.GroupId);
+        Assert.Equal("correlation", options.CorrelationId);
+        await dequeued.CompleteAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithEmptyGroupId_EnqueuesWithoutGroupAsync()
+    {
+        return base.EnqueueAsync_WithEmptyGroupId_EnqueuesWithoutGroupAsync();
+    }
+
     [Fact]
     public override Task EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync()
     {

@@ -104,9 +104,16 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             visibilityTimeout: options.DeliveryDelay,
             cancellationToken: CancellationToken.None).AnyContext();
 
-        var entry = new QueueEntry<T>(response.Value.MessageId, options.CorrelationId, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0) { GroupId = options.GroupId };
-        foreach (var property in options.Properties)
-            entry.Properties[property.Key] = property.Value;
+        bool preservesMetadata = _options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default;
+        var entry = new QueueEntry<T>(response.Value.MessageId, preservesMetadata ? options.CorrelationId : null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0)
+        {
+            GroupId = preservesMetadata ? options.GroupId : null
+        };
+        if (preservesMetadata)
+        {
+            foreach (var property in options.Properties)
+                entry.Properties[property.Key] = property.Value;
+        }
 
         await OnEnqueuedAsync(entry).AnyContext();
 
