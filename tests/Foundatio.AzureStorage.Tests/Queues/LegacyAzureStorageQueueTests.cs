@@ -142,6 +142,18 @@ public class LegacyAzureStorageQueueTests : QueueTestBase
         return base.DuplicateDetection_WithNullIdentifier_AcceptsAllItemsAsync();
     }
 
+    [Fact(Skip = "Legacy mode does not support GroupId")]
+    public override Task AbandonAsync_WithGroupId_PreservesGroupIdOnRetryAsync()
+    {
+        return base.AbandonAsync_WithGroupId_PreservesGroupIdOnRetryAsync();
+    }
+
+    [Fact(Skip = "Legacy mode does not support GroupId")]
+    public override Task EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync()
+    {
+        return base.EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync();
+    }
+
     [Fact]
     public override Task EnqueueAsync_WithSerializationError_ThrowsAndLeavesQueueEmptyAsync()
     {

@@ -113,6 +113,12 @@ public class AzureStorageQueueTests : QueueTestBase
     }
 
     [Fact]
+    public override Task AbandonAsync_WithGroupId_PreservesGroupIdOnRetryAsync()
+    {
+        return base.AbandonAsync_WithGroupId_PreservesGroupIdOnRetryAsync();
+    }
+
+    [Fact]
     public override Task DequeueAsync_WithDispose_AutoAbandonsEntryAsync()
     {
         return base.DequeueAsync_WithDispose_AutoAbandonsEntryAsync();
@@ -140,6 +146,12 @@ public class AzureStorageQueueTests : QueueTestBase
     public override Task DuplicateDetection_WithNullIdentifier_AcceptsAllItemsAsync()
     {
         return base.DuplicateDetection_WithNullIdentifier_AcceptsAllItemsAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync()
+    {
+        return base.EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync();
     }
 
     [Fact]
