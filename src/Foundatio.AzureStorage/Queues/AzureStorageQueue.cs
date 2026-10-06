@@ -23,6 +23,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
     private long _completedCount;
     private long _abandonedCount;
     private long _workerErrorCount;
+    private static readonly TimeSpan MinWorkerErrorDelay = TimeSpan.FromSeconds(1);
     private bool _queueCreated;
 
     public AzureStorageQueue(AzureStorageQueueOptions<T> options) : base(options)
@@ -452,9 +453,16 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 {
                     queueEntry = await DequeueImplAsync(linkedCancellationToken.Token).AnyContext();
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (linkedCancellationToken.IsCancellationRequested) { }
+                catch (Exception ex)
                 {
-                    // Ignore cancellation
+                    Interlocked.Increment(ref _workerErrorCount);
+                    _logger.LogError(ex, "Error on Dequeue: {Message}", ex.Message);
+                    try
+                    {
+                        await _timeProvider.Delay(_options.DequeueInterval > MinWorkerErrorDelay ? _options.DequeueInterval : MinWorkerErrorDelay, linkedCancellationToken.Token).AnyContext();
+                    }
+                    catch (OperationCanceledException) { }
                 }
 
                 if (linkedCancellationToken.IsCancellationRequested || queueEntry == null)
@@ -471,8 +479,17 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                     Interlocked.Increment(ref _workerErrorCount);
                     _logger.LogError(ex, "Worker error: {Message}", ex.Message);
 
-                    if (!queueEntry.IsAbandoned && !queueEntry.IsCompleted)
-                        await queueEntry.AbandonAsync().AnyContext();
+                    if (!queueEntry.IsAbandoned && !queueEntry.IsCompleted && !linkedCancellationToken.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            await queueEntry.AbandonAsync().AnyContext();
+                        }
+                        catch (Exception abandonEx)
+                        {
+                            _logger.LogError(abandonEx, "Worker error abandoning queue entry: {Message}", abandonEx.Message);
+                        }
+                    }
                 }
             }
 
@@ -484,28 +501,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
     {
         _logger.LogInformation("Exceeded retry limit ({Attempts}/{Retries}), moving message {QueueEntryId} to dead letter", entry.Attempts, _options.Retries, entry.Id);
 
-        BinaryData messageBody;
-        if (entry.Value is null)
-        {
-            messageBody = entry.UnderlyingMessage.Body;
-        }
-        else if (_options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default)
-        {
-            var envelope = new QueueMessageEnvelope<T>
-            {
-                CorrelationId = entry.CorrelationId,
-                Properties = entry.Properties,
-                GroupId = entry.GroupId,
-                Data = entry.Value
-            };
-            messageBody = new BinaryData(_serializer.SerializeToBytes(envelope));
-        }
-        else
-        {
-            messageBody = new BinaryData(_serializer.SerializeToBytes(entry.Value));
-        }
-
-        await _deadletterQueueClient.Value.SendMessageAsync(messageBody).AnyContext();
+        await _deadletterQueueClient.Value.SendMessageAsync(entry.UnderlyingMessage.Body).AnyContext();
         await _queueClient.Value.DeleteMessageAsync(entry.UnderlyingMessage.MessageId, entry.PopReceipt).AnyContext();
     }
 
