@@ -87,6 +87,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             {
                 CorrelationId = options.CorrelationId,
                 Properties = options.Properties,
+                GroupId = options.GroupId,
                 Data = data
             };
             messageBodyBytes = _serializer.SerializeToBytes(envelope);
@@ -103,7 +104,10 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             visibilityTimeout: options.DeliveryDelay,
             cancellationToken: CancellationToken.None).AnyContext();
 
-        var entry = new QueueEntry<T>(response.Value.MessageId, null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0);
+        var entry = new QueueEntry<T>(response.Value.MessageId, null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0)
+        {
+            GroupId = _options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default ? options.GroupId : null
+        };
         await OnEnqueuedAsync(entry).AnyContext();
 
         _logger.LogTrace("Enqueued message {MessageId}", response.Value.MessageId);
@@ -179,6 +183,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
         T? data;
         string? correlationId = null;
+        string? groupId = null;
         IDictionary<string, string>? properties = null;
         Exception? deserializeException = null;
 
@@ -194,6 +199,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                     {
                         data = envelope.Data;
                         correlationId = envelope.CorrelationId;
+                        groupId = envelope.GroupId;
                         properties = envelope.Properties;
                     }
                     else
@@ -231,7 +237,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             return null;
         }
 
-        var entry = new AzureStorageQueueEntry<T>(message, correlationId, properties, data, this);
+        var entry = new AzureStorageQueueEntry<T>(message, correlationId, properties, data, this) { GroupId = groupId };
 
         if (entry.Attempts > _options.Retries + 1)
         {
@@ -482,6 +488,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             {
                 CorrelationId = entry.CorrelationId,
                 Properties = entry.Properties,
+                GroupId = entry.GroupId,
                 Data = entry.Value
             };
             messageBody = new BinaryData(_serializer.SerializeToBytes(envelope));
@@ -519,6 +526,11 @@ internal record QueueMessageEnvelope<T> where T : class
     /// Custom properties/metadata
     /// </summary>
     public IDictionary<string, string>? Properties { get; init; }
+
+    /// <summary>
+    /// Logical group or tenant key the message was enqueued with
+    /// </summary>
+    public string? GroupId { get; init; }
 
     /// <summary>
     /// The actual message payload

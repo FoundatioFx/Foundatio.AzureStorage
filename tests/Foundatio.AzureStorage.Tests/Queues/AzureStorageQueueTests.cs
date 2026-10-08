@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Storage.Queues;
@@ -113,6 +115,18 @@ public class AzureStorageQueueTests : QueueTestBase
     }
 
     [Fact]
+    public override Task AbandonAsync_WithGroupId_PreservesGroupIdOnRetryAsync()
+    {
+        return base.AbandonAsync_WithGroupId_PreservesGroupIdOnRetryAsync();
+    }
+
+    [Fact]
+    public override Task AbandonAsync_WithGroupIdAndRetryDelay_PreservesGroupIdOnRetryAsync()
+    {
+        return base.AbandonAsync_WithGroupIdAndRetryDelay_PreservesGroupIdOnRetryAsync();
+    }
+
+    [Fact]
     public override Task DequeueAsync_WithDispose_AutoAbandonsEntryAsync()
     {
         return base.DequeueAsync_WithDispose_AutoAbandonsEntryAsync();
@@ -142,10 +156,88 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.DuplicateDetection_WithNullIdentifier_AcceptsAllItemsAsync();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EnqueueAsync_WithCompatibilityMode_PersistsMetadataOnlyInDefaultModeAsync(bool legacy)
+    {
+        // Arrange
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        if (String.IsNullOrEmpty(connectionString))
+            return;
+
+#pragma warning disable CS0618 // Exercise the supported legacy wire format.
+        using var queue = new AzureStorageQueue<SimpleWorkItem>(new AzureStorageQueueOptions<SimpleWorkItem>
+        {
+            ConnectionString = connectionString,
+            Name = "foundatio-metadata-" + Guid.NewGuid().ToString("N"),
+            CompatibilityMode = legacy ? AzureStorageQueueCompatibilityMode.Legacy : AzureStorageQueueCompatibilityMode.Default,
+            MetricsPollingEnabled = false,
+            LoggerFactory = Log
+        });
+#pragma warning restore CS0618
+        try
+        {
+            IQueueEntry<SimpleWorkItem>? enqueued = null;
+            queue.Enqueued.AddHandler((_, args) =>
+            {
+                enqueued = args.Entry;
+                return Task.CompletedTask;
+            });
+            var options = new QueueEntryOptions { GroupId = "tenant", CorrelationId = "correlation" };
+            options.Properties.Add("custom", "value");
+
+            // Act
+            await queue.EnqueueAsync(new SimpleWorkItem { Data = "payload" }, options);
+            var dequeued = await queue.DequeueAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.NotNull(enqueued);
+            Assert.NotNull(dequeued);
+            Assert.Equal("payload", dequeued.Value.Data);
+            Assert.Equal(legacy ? null : "tenant", dequeued.GroupId);
+            Assert.Equal(legacy ? null : "correlation", dequeued.CorrelationId);
+            Assert.Equal(dequeued.GroupId, enqueued.GroupId);
+            if (legacy)
+                Assert.Empty(dequeued.Properties);
+            else
+                Assert.Equal("value", dequeued.Properties["custom"]);
+            await dequeued.CompleteAsync();
+        }
+        finally
+        {
+            await queue.DeleteQueueAsync();
+        }
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WhenEnqueuingHandlerClearsGroupId_EnqueuesWithoutGroupAsync()
+    {
+        return base.EnqueueAsync_WhenEnqueuingHandlerClearsGroupId_EnqueuesWithoutGroupAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithEmptyGroupId_EnqueuesWithoutGroupAsync()
+    {
+        return base.EnqueueAsync_WithEmptyGroupId_EnqueuesWithoutGroupAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync()
+    {
+        return base.EnqueueAsync_WithGroupId_RoundTripsGroupIdAsync();
+    }
+
     [Fact]
     public override Task EnqueueAsync_WithSerializationError_ThrowsAndLeavesQueueEmptyAsync()
     {
         return base.EnqueueAsync_WithSerializationError_ThrowsAndLeavesQueueEmptyAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithReusedOptions_DoesNotChangeCallerOptionsAsync()
+    {
+        return base.EnqueueAsync_WithReusedOptions_DoesNotChangeCallerOptionsAsync();
     }
 
     [Fact(Skip = "Azure Storage Queues do not support custom entry IDs")]
@@ -405,5 +497,48 @@ public class AzureStorageQueueTests : QueueTestBase
         // Cleanup
         await queue.DeleteQueueAsync();
         await new QueueClient(connectionString, poisonQueueName).DeleteIfExistsAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AbandonAsync_WhenRetriesExceeded_PreservesGroupIdInPoisonMessageAsync()
+    {
+        // Arrange
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        if (String.IsNullOrEmpty(connectionString))
+            return;
+
+        var queueName = "foundatio-" + Guid.NewGuid().ToString("N").Substring(10);
+        var poisonQueueName = $"{queueName}-poison";
+
+        using var queue = new AzureStorageQueue<SimpleWorkItem>(o => o
+            .ConnectionString(connectionString)
+            .Name(queueName)
+            .Retries(0)
+            .WorkItemTimeout(TimeSpan.FromSeconds(30))
+            .DequeueInterval(TimeSpan.FromSeconds(1))
+            .MetricsPollingInterval(TimeSpan.Zero)
+            .LoggerFactory(Log));
+
+        try
+        {
+            await queue.EnqueueAsync(new SimpleWorkItem { Data = "poison" }, new QueueEntryOptions { GroupId = "tenant" });
+            var entry = await queue.DequeueAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(entry);
+
+            // Act
+            await entry.AbandonAsync();
+
+            // Assert
+            var poisonMessage = await new QueueClient(connectionString, poisonQueueName).ReceiveMessageAsync(cancellationToken: TestCancellationToken);
+            Assert.NotNull(poisonMessage.Value);
+            using var envelope = JsonDocument.Parse(poisonMessage.Value.Body.ToArray());
+            var groupId = envelope.RootElement.EnumerateObject().Single(p => String.Equals(p.Name, "GroupId", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("tenant", groupId.Value.GetString());
+        }
+        finally
+        {
+            await queue.DeleteQueueAsync();
+            await new QueueClient(connectionString, poisonQueueName).DeleteIfExistsAsync(TestContext.Current.CancellationToken);
+        }
     }
 }
