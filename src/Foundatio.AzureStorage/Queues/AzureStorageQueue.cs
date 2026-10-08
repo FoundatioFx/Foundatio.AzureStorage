@@ -22,7 +22,6 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
     private long _dequeuedCount;
     private long _completedCount;
     private long _abandonedCount;
-    private long _workerErrorCount;
     private bool _queueCreated;
 
     public AzureStorageQueue(AzureStorageQueueOptions<T> options) : base(options)
@@ -346,7 +345,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 Dequeued = _dequeuedCount,
                 Completed = _completedCount,
                 Abandoned = _abandonedCount,
-                Errors = _workerErrorCount,
+                Errors = WorkerErrorCount,
                 Timeouts = 0
             };
 
@@ -366,7 +365,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             Dequeued = _dequeuedCount,
             Completed = _completedCount,
             Abandoned = _abandonedCount,
-            Errors = _workerErrorCount,
+            Errors = WorkerErrorCount,
             Timeouts = 0 // Azure handles visibility timeout natively; client-side tracking not meaningful
         };
     }
@@ -383,7 +382,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 Dequeued = _dequeuedCount,
                 Completed = _completedCount,
                 Abandoned = _abandonedCount,
-                Errors = _workerErrorCount,
+                Errors = WorkerErrorCount,
                 Timeouts = 0
             };
 
@@ -402,7 +401,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             Dequeued = _dequeuedCount,
             Completed = _completedCount,
             Abandoned = _abandonedCount,
-            Errors = _workerErrorCount,
+            Errors = WorkerErrorCount,
             Timeouts = 0
         };
     }
@@ -420,7 +419,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
         _dequeuedCount = 0;
         _completedCount = 0;
         _abandonedCount = 0;
-        _workerErrorCount = 0;
+        ResetWorkerErrorCount();
 
         sw.Stop();
         _logger.LogTrace("Deleting queue took {Elapsed:g}", sw.Elapsed);
@@ -428,49 +427,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
     protected override void StartWorkingImpl(Func<IQueueEntry<T>, CancellationToken, Task> handler, bool autoComplete, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(handler);
-
-        var linkedCancellationToken = GetLinkedDisposableCancellationTokenSource(cancellationToken);
-
-        Task.Run(async () =>
-        {
-            _logger.LogTrace("WorkerLoop Start {QueueName}", _options.Name);
-
-            while (!linkedCancellationToken.IsCancellationRequested)
-            {
-                _logger.LogTrace("WorkerLoop Signaled {QueueName}", _options.Name);
-
-                IQueueEntry<T>? queueEntry = null;
-                try
-                {
-                    queueEntry = await DequeueImplAsync(linkedCancellationToken.Token).AnyContext();
-                }
-                catch (OperationCanceledException)
-                {
-                    // Ignore cancellation
-                }
-
-                if (linkedCancellationToken.IsCancellationRequested || queueEntry == null)
-                    continue;
-
-                try
-                {
-                    await handler(queueEntry, linkedCancellationToken.Token).AnyContext();
-                    if (autoComplete && !queueEntry.IsAbandoned && !queueEntry.IsCompleted)
-                        await queueEntry.CompleteAsync().AnyContext();
-                }
-                catch (Exception ex)
-                {
-                    Interlocked.Increment(ref _workerErrorCount);
-                    _logger.LogError(ex, "Worker error: {Message}", ex.Message);
-
-                    if (!queueEntry.IsAbandoned && !queueEntry.IsCompleted)
-                        await queueEntry.AbandonAsync().AnyContext();
-                }
-            }
-
-            _logger.LogTrace("Worker exiting: {QueueName} Cancel Requested: {IsCancellationRequested}", _options.Name, linkedCancellationToken.IsCancellationRequested);
-        }, linkedCancellationToken.Token).ContinueWith(t => linkedCancellationToken.Dispose());
+        _ = StartWorker(handler, autoComplete, cancellationToken);
     }
 
     private async Task DeadLetterMessageAsync(AzureStorageQueueEntry<T> entry)
