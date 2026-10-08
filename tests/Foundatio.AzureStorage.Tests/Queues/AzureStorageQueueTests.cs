@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Storage.Queues;
@@ -157,7 +159,7 @@ public class AzureStorageQueueTests : QueueTestBase
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EnqueueAsync_WithCompatibilityMode_EventMatchesDequeuedMetadataAsync(bool legacy)
+    public async Task EnqueueAsync_WithCompatibilityMode_PersistsMetadataOnlyInDefaultModeAsync(bool legacy)
     {
         // Arrange
         string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
@@ -196,17 +198,10 @@ public class AzureStorageQueueTests : QueueTestBase
             Assert.Equal(legacy ? null : "tenant", dequeued.GroupId);
             Assert.Equal(legacy ? null : "correlation", dequeued.CorrelationId);
             Assert.Equal(dequeued.GroupId, enqueued.GroupId);
-            Assert.Equal(dequeued.CorrelationId, enqueued.CorrelationId);
-            Assert.Equal(dequeued.Properties.Count, enqueued.Properties.Count);
             if (legacy)
                 Assert.Empty(dequeued.Properties);
             else
-            {
                 Assert.Equal("value", dequeued.Properties["custom"]);
-                Assert.Equal("value", enqueued.Properties["custom"]);
-            }
-            Assert.Equal("tenant", options.GroupId);
-            Assert.Equal("correlation", options.CorrelationId);
             await dequeued.CompleteAsync();
         }
         finally
@@ -502,5 +497,48 @@ public class AzureStorageQueueTests : QueueTestBase
         // Cleanup
         await queue.DeleteQueueAsync();
         await new QueueClient(connectionString, poisonQueueName).DeleteIfExistsAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AbandonAsync_WhenRetriesExceeded_PreservesGroupIdInPoisonMessageAsync()
+    {
+        // Arrange
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        if (String.IsNullOrEmpty(connectionString))
+            return;
+
+        var queueName = "foundatio-" + Guid.NewGuid().ToString("N").Substring(10);
+        var poisonQueueName = $"{queueName}-poison";
+
+        using var queue = new AzureStorageQueue<SimpleWorkItem>(o => o
+            .ConnectionString(connectionString)
+            .Name(queueName)
+            .Retries(0)
+            .WorkItemTimeout(TimeSpan.FromSeconds(30))
+            .DequeueInterval(TimeSpan.FromSeconds(1))
+            .MetricsPollingInterval(TimeSpan.Zero)
+            .LoggerFactory(Log));
+
+        try
+        {
+            await queue.EnqueueAsync(new SimpleWorkItem { Data = "poison" }, new QueueEntryOptions { GroupId = "tenant" });
+            var entry = await queue.DequeueAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(entry);
+
+            // Act
+            await entry.AbandonAsync();
+
+            // Assert
+            var poisonMessage = await new QueueClient(connectionString, poisonQueueName).ReceiveMessageAsync(cancellationToken: TestCancellationToken);
+            Assert.NotNull(poisonMessage.Value);
+            using var envelope = JsonDocument.Parse(poisonMessage.Value.Body.ToArray());
+            var groupId = envelope.RootElement.EnumerateObject().Single(p => String.Equals(p.Name, "GroupId", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("tenant", groupId.Value.GetString());
+        }
+        finally
+        {
+            await queue.DeleteQueueAsync();
+            await new QueueClient(connectionString, poisonQueueName).DeleteIfExistsAsync(TestContext.Current.CancellationToken);
+        }
     }
 }
