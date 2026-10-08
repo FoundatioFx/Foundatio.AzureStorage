@@ -282,6 +282,24 @@ public class AzureStorageQueueTests : QueueTestBase
         return base.CanHandleErrorInWorkerAsync();
     }
 
+    [Fact]
+    public override Task StartWorkingAsync_WhenDequeueThrows_KeepsWorkingAsync()
+    {
+        return base.StartWorkingAsync_WhenDequeueThrows_KeepsWorkingAsync();
+    }
+
+    [Fact]
+    public override Task StartWorkingAsync_WhenAbandonThrows_KeepsWorkingAsync()
+    {
+        return base.StartWorkingAsync_WhenAbandonThrows_KeepsWorkingAsync();
+    }
+
+    [Fact]
+    public override Task StartWorkingAsync_WhenCancelled_StopsWithoutWorkerErrorsAsync()
+    {
+        return base.StartWorkingAsync_WhenCancelled_StopsWithoutWorkerErrorsAsync();
+    }
+
     [Fact(Skip = "Azure Storage Queue handles visibility timeout natively; no client-side auto-abandon")]
     public override Task WorkItemsWillTimeoutAsync()
     {
