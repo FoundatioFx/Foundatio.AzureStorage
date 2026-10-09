@@ -104,10 +104,18 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             visibilityTimeout: options.DeliveryDelay,
             cancellationToken: CancellationToken.None).AnyContext();
 
-        var entry = new QueueEntry<T>(response.Value.MessageId, null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0)
+        bool persistsMetadata = _options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default;
+        var entry = new QueueEntry<T>(response.Value.MessageId, persistsMetadata ? options.CorrelationId : null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0)
         {
-            GroupId = _options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default ? options.GroupId : null
+            GroupId = persistsMetadata ? options.GroupId : null
         };
+
+        if (persistsMetadata)
+        {
+            foreach (var property in options.Properties)
+                entry.Properties[property.Key] = property.Value;
+        }
+
         await OnEnqueuedAsync(entry).AnyContext();
 
         _logger.LogTrace("Enqueued message {MessageId}", response.Value.MessageId);
@@ -477,28 +485,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
     {
         _logger.LogInformation("Exceeded retry limit ({Attempts}/{Retries}), moving message {QueueEntryId} to dead letter", entry.Attempts, _options.Retries, entry.Id);
 
-        BinaryData messageBody;
-        if (entry.Value is null)
-        {
-            messageBody = entry.UnderlyingMessage.Body;
-        }
-        else if (_options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default)
-        {
-            var envelope = new QueueMessageEnvelope<T>
-            {
-                CorrelationId = entry.CorrelationId,
-                Properties = entry.Properties,
-                GroupId = entry.GroupId,
-                Data = entry.Value
-            };
-            messageBody = new BinaryData(_serializer.SerializeToBytes(envelope));
-        }
-        else
-        {
-            messageBody = new BinaryData(_serializer.SerializeToBytes(entry.Value));
-        }
-
-        await _deadletterQueueClient.Value.SendMessageAsync(messageBody).AnyContext();
+        await _deadletterQueueClient.Value.SendMessageAsync(entry.UnderlyingMessage.Body).AnyContext();
         await _queueClient.Value.DeleteMessageAsync(entry.UnderlyingMessage.MessageId, entry.PopReceipt).AnyContext();
     }
 
