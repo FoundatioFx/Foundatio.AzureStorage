@@ -198,6 +198,8 @@ public class AzureStorageQueueTests : QueueTestBase
             Assert.Equal(legacy ? null : "tenant", dequeued.GroupId);
             Assert.Equal(legacy ? null : "correlation", dequeued.CorrelationId);
             Assert.Equal(dequeued.GroupId, enqueued.GroupId);
+            Assert.Equal(dequeued.CorrelationId, enqueued.CorrelationId);
+            Assert.Equal(dequeued.Properties, enqueued.Properties);
             if (legacy)
                 Assert.Empty(dequeued.Properties);
             else
@@ -497,6 +499,54 @@ public class AzureStorageQueueTests : QueueTestBase
         // Cleanup
         await queue.DeleteQueueAsync();
         await new QueueClient(connectionString, poisonQueueName).DeleteIfExistsAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AbandonAsync_WhenRetriesExceeded_ForwardsOriginalBodyToPoisonQueueAsync()
+    {
+        // Arrange
+        string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
+        if (String.IsNullOrEmpty(connectionString))
+            return;
+
+        var queueName = "foundatio-" + Guid.NewGuid().ToString("N").Substring(10);
+        var poisonQueueName = $"{queueName}-poison";
+
+        using var queue = new AzureStorageQueue<SimpleWorkItem>(o => o
+            .ConnectionString(connectionString)
+            .Name(queueName)
+            .Retries(0)
+            .WorkItemTimeout(TimeSpan.FromSeconds(30))
+            .DequeueInterval(TimeSpan.FromSeconds(1))
+            .MetricsPollingInterval(TimeSpan.Zero)
+            .LoggerFactory(Log));
+
+        try
+        {
+            await queue.EnqueueAsync(new SimpleWorkItem { Data = "setup" });
+            var setupEntry = await queue.DequeueAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(setupEntry);
+            await setupEntry.CompleteAsync();
+
+            const string legacyBody = """{"Data":"legacy","Id":7}""";
+            await new QueueClient(connectionString, queueName).SendMessageAsync(new BinaryData(Encoding.UTF8.GetBytes(legacyBody)), cancellationToken: TestCancellationToken);
+            var entry = await queue.DequeueAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(entry);
+            Assert.Equal("legacy", entry.Value.Data);
+            entry.Properties["added-by-handler"] = "value";
+
+            // Act
+            await entry.AbandonAsync();
+
+            // Assert
+            var poisonMessage = await new QueueClient(connectionString, poisonQueueName).ReceiveMessageAsync(cancellationToken: TestCancellationToken);
+            Assert.NotNull(poisonMessage.Value);
+            Assert.Equal(legacyBody, poisonMessage.Value.Body.ToString());
+        }
+        finally
+        {
+            await queue.DeleteQueueAsync();
+        }
     }
 
     [Fact]
