@@ -22,23 +22,30 @@ public class AzureStorageQueueTests : QueueTestBase
     {
     }
 
-    protected override IQueue<SimpleWorkItem>? GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[]? retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider? timeProvider = null, ISerializer? serializer = null)
+    protected override IQueue<SimpleWorkItem>? GetQueue(int retries = 1, TimeSpan? workItemTimeout = null, TimeSpan? retryDelay = null, int[]? retryMultipliers = null, int deadLetterMaxItems = 100, bool runQueueMaintenance = true, TimeProvider? timeProvider = null, ISerializer? serializer = null, Func<SimpleWorkItem, string?>? groupIdResolver = null)
     {
         string? connectionString = Configuration.GetConnectionString("AzureStorageConnectionString");
         if (String.IsNullOrEmpty(connectionString))
             return null;
 
         _logger.LogDebug("Queue Id: {Name}", _queueName);
-        return new AzureStorageQueue<SimpleWorkItem>(o => o
-            .ConnectionString(connectionString)
-            .Name(_queueName)
-            .Retries(retries)
-            .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
-            .DequeueInterval(TimeSpan.FromSeconds(1))
-            .MetricsPollingInterval(TimeSpan.Zero)
-            .TimeProvider(timeProvider)
-            .Serializer(serializer)
-            .LoggerFactory(Log));
+        return new AzureStorageQueue<SimpleWorkItem>(o =>
+        {
+            o.ConnectionString(connectionString)
+                .Name(_queueName)
+                .Retries(retries)
+                .WorkItemTimeout(workItemTimeout.GetValueOrDefault(TimeSpan.FromMinutes(5)))
+                .DequeueInterval(TimeSpan.FromSeconds(1))
+                .MetricsPollingInterval(TimeSpan.Zero)
+                .TimeProvider(timeProvider)
+                .Serializer(serializer)
+                .LoggerFactory(Log);
+
+            if (groupIdResolver is not null)
+                o.GroupId(groupIdResolver);
+
+            return o;
+        });
     }
 
     protected override Task CleanupQueueAsync(IQueue<SimpleWorkItem> queue)
@@ -238,6 +245,54 @@ public class AzureStorageQueueTests : QueueTestBase
     public override Task EnqueueAsync_WithReusedOptions_DoesNotChangeCallerOptionsAsync()
     {
         return base.EnqueueAsync_WithReusedOptions_DoesNotChangeCallerOptionsAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WhenResolverReturnsEmpty_EnqueuesWithoutGroupAsync()
+    {
+        return base.EnqueueAsync_WhenResolverReturnsEmpty_EnqueuesWithoutGroupAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WhenResolverReturnsNull_EnqueuesWithoutGroupAsync()
+    {
+        return base.EnqueueAsync_WhenResolverReturnsNull_EnqueuesWithoutGroupAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithActivity_AppliesCorrelationBeforeEnqueuingHandlersAsync()
+    {
+        return base.EnqueueAsync_WithActivity_AppliesCorrelationBeforeEnqueuingHandlersAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithEmptyGroupIdAndResolver_UsesPayloadValueAsync()
+    {
+        return base.EnqueueAsync_WithEmptyGroupIdAndResolver_UsesPayloadValueAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithExplicitGroupId_OverridesResolverAsync()
+    {
+        return base.EnqueueAsync_WithExplicitGroupId_OverridesResolverAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithGroupIdResolver_DoesNotChangeCallerOptionsAsync()
+    {
+        return base.EnqueueAsync_WithGroupIdResolver_DoesNotChangeCallerOptionsAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithGroupIdResolver_UsesPayloadValueAsync()
+    {
+        return base.EnqueueAsync_WithGroupIdResolver_UsesPayloadValueAsync();
+    }
+
+    [Fact]
+    public override Task EnqueueAsync_WithReusedOptionsAndGroupIdResolver_EnqueuesEachMessageAsync()
+    {
+        return base.EnqueueAsync_WithReusedOptionsAndGroupIdResolver_EnqueuesEachMessageAsync();
     }
 
     [Fact(Skip = "Azure Storage Queues do not support custom entry IDs")]
