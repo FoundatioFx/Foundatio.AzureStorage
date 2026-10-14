@@ -211,6 +211,7 @@ public class AzureStorageQueueTests : QueueTestBase
                 Assert.Empty(dequeued.Properties);
             else
                 Assert.Equal("value", dequeued.Properties["custom"]);
+
             await dequeued.CompleteAsync();
         }
         finally
