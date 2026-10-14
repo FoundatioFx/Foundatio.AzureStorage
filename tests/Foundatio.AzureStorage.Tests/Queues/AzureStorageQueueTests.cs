@@ -205,6 +205,8 @@ public class AzureStorageQueueTests : QueueTestBase
             Assert.Equal(legacy ? null : "tenant", dequeued.GroupId);
             Assert.Equal(legacy ? null : "correlation", dequeued.CorrelationId);
             Assert.Equal(dequeued.GroupId, enqueued.GroupId);
+            Assert.Equal(dequeued.CorrelationId, enqueued.CorrelationId);
+            Assert.Equal(dequeued.Properties, enqueued.Properties);
             if (legacy)
                 Assert.Empty(dequeued.Properties);
             else

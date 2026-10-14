@@ -104,10 +104,19 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
             visibilityTimeout: options.DeliveryDelay,
             cancellationToken: CancellationToken.None).AnyContext();
 
-        var entry = new QueueEntry<T>(response.Value.MessageId, null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0)
+        // Legacy mode stores only the raw value, so the Enqueued entry carries only what is actually persisted.
+        bool storesMetadata = _options.CompatibilityMode is AzureStorageQueueCompatibilityMode.Default;
+        var entry = new QueueEntry<T>(response.Value.MessageId, storesMetadata ? options.CorrelationId : null, data, this, _timeProvider.GetLocalNow().UtcDateTime, 0)
         {
-            GroupId = _options.CompatibilityMode == AzureStorageQueueCompatibilityMode.Default ? options.GroupId : null
+            GroupId = storesMetadata ? options.GroupId : null
         };
+
+        if (storesMetadata && options.Properties is not null)
+        {
+            foreach (var property in options.Properties)
+                entry.Properties[property.Key] = property.Value;
+        }
+
         await OnEnqueuedAsync(entry).AnyContext();
 
         _logger.LogTrace("Enqueued message {MessageId}", response.Value.MessageId);
