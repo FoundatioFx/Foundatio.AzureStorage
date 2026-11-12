@@ -10,7 +10,7 @@ Enqueues messages to an Azure Storage Queue with support for correlation IDs and
 
 **Usage:**
 ```bash
-dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net8.0 -- [options]
+dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net10.0 -- [options]
 ```
 
 **Options:**
@@ -25,17 +25,17 @@ dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net8.0 -
 **Examples:**
 ```bash
 # Send a simple message using emulator
-dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net8.0
+dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net10.0
 
 # Send message with metadata (Default mode)
-dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net8.0 -- \
+dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net10.0 -- \
   --message "Test Message" \
   --correlation-id "12345" \
   --property "Source=Sample" \
   --property "Priority=High"
 
 # Send message in Legacy mode (v11 SDK compatibility)
-dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net8.0 -- \
+dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net10.0 -- \
   --mode Legacy \
   --message "Legacy Message"
 ```
@@ -46,7 +46,7 @@ Dequeues and processes messages from an Azure Storage Queue, displaying all meta
 
 **Usage:**
 ```bash
-dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net8.0 -- [options]
+dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net10.0 -- [options]
 ```
 
 **Options:**
@@ -58,14 +58,14 @@ dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net8.0 -
 **Examples:**
 ```bash
 # Process one message using emulator
-dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net8.0
+dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net10.0
 
 # Process messages continuously (press Ctrl+C to stop)
-dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net8.0 -- \
+dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net10.0 -- \
   --count 0
 
 # Process messages in Legacy mode
-dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net8.0 -- \
+dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net10.0 -- \
   --mode Legacy
 ```
 
@@ -123,7 +123,7 @@ The applications check for connection strings in this order:
 
 2. Send messages with metadata:
    ```bash
-   dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net8.0 -- \
+   dotnet run --project samples/Foundatio.AzureStorage.Enqueue --framework net10.0 -- \
      --message "Hello from Foundatio" \
      --correlation-id "demo-123" \
      --property "Source=Demo" \
@@ -133,7 +133,7 @@ The applications check for connection strings in this order:
 
 3. Process the messages:
    ```bash
-   dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net8.0 -- \
+   dotnet run --project samples/Foundatio.AzureStorage.Dequeue --framework net10.0 -- \
      --count 0
    ```
 
