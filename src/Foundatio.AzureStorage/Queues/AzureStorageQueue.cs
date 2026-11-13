@@ -159,7 +159,7 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
                 try
                 {
                     if (!linkedCancellationToken.IsCancellationRequested)
-                        await _timeProvider.Delay(_options.DequeueInterval, linkedCancellationToken).AnyContext();
+                        await Task.Delay(_options.DequeueInterval, _timeProvider, linkedCancellationToken).AnyContext();
                 }
                 catch (OperationCanceledException)
                 {
