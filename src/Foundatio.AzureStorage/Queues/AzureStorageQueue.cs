@@ -436,6 +436,8 @@ public class AzureStorageQueue<T> : QueueBase<T, AzureStorageQueueOptions<T>> wh
 
     protected override void StartWorkingImpl(Func<IQueueEntry<T>, CancellationToken, Task> handler, bool autoComplete, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(handler);
+
         _ = StartWorker(handler, autoComplete, cancellationToken);
     }
 
